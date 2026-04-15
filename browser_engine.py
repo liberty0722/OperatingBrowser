@@ -103,6 +103,71 @@ class BrowserEngine:
                 return edge_dir
         return ""
 
+    @staticmethod
+    def _prepare_debug_user_data_dir(original_dir: str) -> str:
+        """为远程调试创建专用的 user-data-dir。
+
+        Chrome 新版不允许在默认 user-data-dir 上开启 --remote-debugging-port，
+        会报 "DevTools remote debugging requires a non-default data directory"。
+
+        解决方案：创建一个 ``<原目录>-Debug`` 目录，把原始 profile 子目录
+        （Default、Profile 1 等）用 NTFS junction 链接过去，这样 Chrome 使用
+        非默认路径启动调试端口，但实际读写的仍是用户原始 profile 数据。
+
+        Args:
+            original_dir: Chrome 默认的 User Data 目录路径。
+
+        Returns:
+            可用于 --user-data-dir 的调试专用目录路径。
+        """
+        import shutil
+
+        debug_dir = original_dir.rstrip("\\/") + "-Debug"
+        os.makedirs(debug_dir, exist_ok=True)
+
+        # 需要复制的顶层文件（小文件，不含 profile 数据）
+        top_files = ["Local State", "First Run"]
+        for fname in top_files:
+            src = os.path.join(original_dir, fname)
+            dst = os.path.join(debug_dir, fname)
+            if os.path.isfile(src):
+                try:
+                    shutil.copy2(src, dst)
+                except Exception:
+                    pass
+
+        # 把 profile 目录用 junction 链接（Default、Profile 1、Profile 2...）
+        try:
+            for entry in os.scandir(original_dir):
+                if not entry.is_dir(follow_symlinks=False):
+                    continue
+                name_lower = entry.name.lower()
+                # 只链接 profile 目录
+                is_profile = (
+                    name_lower == "default"
+                    or name_lower.startswith("profile ")
+                    or name_lower == "guest profile"
+                    or name_lower == "system profile"
+                )
+                if not is_profile:
+                    continue
+                link_path = os.path.join(debug_dir, entry.name)
+                # 已经是 junction / 已存在则跳过
+                if os.path.exists(link_path):
+                    continue
+                # 创建 NTFS junction（不需要管理员权限）
+                subprocess.run(
+                    ["cmd", "/c", "mklink", "/J", link_path, entry.path],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=5,
+                )
+                logger.info("创建 profile junction: %s -> %s", link_path, entry.path)
+        except Exception as exc:
+            logger.warning("创建 profile junction 时出错: %s", exc)
+
+        return debug_dir
+
     def _kill_debug_chrome_only(self, port: str) -> None:
         """只关闭占用指定调试端口的 Chrome 进程，不影响用户的普通 Chrome。"""
         try:
@@ -127,6 +192,44 @@ class BrowserEngine:
         except Exception as exc:
             logger.warning("清理旧调试端口进程时出错: %s", exc)
 
+    @staticmethod
+    def _is_port_listening(port: int) -> bool:
+        """检测指定端口是否有进程在监听（TCP socket 级检测）。"""
+        import socket
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(1)
+        try:
+            result = sock.connect_ex(("127.0.0.1", port))
+            return result == 0
+        except Exception:
+            return False
+        finally:
+            sock.close()
+
+    @staticmethod
+    def _get_port_owner(port: int) -> str:
+        """获取占用指定端口的进程信息。"""
+        try:
+            result = subprocess.run(
+                ["netstat", "-ano"],
+                capture_output=True, text=True, timeout=5,
+            )
+            for line in result.stdout.splitlines():
+                if f":{port}" in line and "LISTENING" in line:
+                    parts = line.split()
+                    pid = parts[-1].strip()
+                    if pid.isdigit():
+                        # 获取进程名
+                        proc_result = subprocess.run(
+                            ["tasklist", "/FI", f"PID eq {pid}", "/NH"],
+                            capture_output=True, text=True, timeout=5,
+                        )
+                        proc_name = proc_result.stdout.strip().split()[0] if proc_result.stdout.strip() else "unknown"
+                        return f"{proc_name} (PID={pid})"
+            return ""
+        except Exception:
+            return ""
+
     def _check_cdp_available(self) -> bool:
         """检测 CDP 端口是否已开放。"""
         import urllib.request
@@ -147,37 +250,243 @@ class BrowserEngine:
         except Exception:
             return {}
 
-    def _connect_reuse(self) -> str:
-        """reuse 模式：连接用户已打开的、带远程调试端口的浏览器。
+    def _is_chrome_running(self) -> bool:
+        """检测是否有 Chrome 进程正在运行（不含带调试端口的实例）。"""
+        try:
+            result = subprocess.run(
+                ["tasklist", "/FI", "IMAGENAME eq chrome.exe", "/NH"],
+                capture_output=True, text=True, timeout=5,
+            )
+            return "chrome.exe" in result.stdout.lower()
+        except Exception:
+            return False
 
-        用户需要自己以 --remote-debugging-port 启动 Chrome，
-        或在 chrome://inspect 中开启远程调试（Chrome M144+）。
-        保留 cookie、登录态、书签等所有用户数据。
+    def _graceful_close_chrome(self, timeout: int = 15) -> bool:
+        """优雅关闭所有 Chrome 进程，等待其完全退出。
+
+        先尝试 taskkill（无 /F），让 Chrome 正常保存数据后退出；
+        超时后再强制 taskkill /F。
+
+        Returns:
+            True 表示 Chrome 已全部退出，False 表示仍有残留。
         """
+        if not self._is_chrome_running():
+            return True
+
+        logger.info("reuse 模式：正在优雅关闭已有 Chrome 进程...")
+
+        # 先尝试正常关闭（Chrome 会保存 session 数据）
+        try:
+            subprocess.run(
+                ["taskkill", "/IM", "chrome.exe"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=5,
+            )
+        except Exception:
+            pass
+
+        # 等待退出
+        for __ in range(timeout):
+            time.sleep(1)
+            if not self._is_chrome_running():
+                logger.info("reuse 模式：Chrome 已正常退出")
+                return True
+
+        # 超时，强制关闭
+        logger.warning("reuse 模式：Chrome 未在 %ds 内退出，强制关闭", timeout)
+        try:
+            subprocess.run(
+                ["taskkill", "/F", "/IM", "chrome.exe"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=5,
+            )
+        except Exception:
+            pass
+        time.sleep(2)
+        return not self._is_chrome_running()
+
+    def _connect_reuse(self) -> str:
+        """reuse 模式：连接到用户真实 Chrome（保留全部登录态和 cookie）。
+
+        策略：
+        1. 先检测 CDP 端口是否已开放 → 直接连接（用户已手动开启调试端口）
+        2. 检测是否有 Chrome 在运行 → 优雅关闭后用调试端口重启（同一 profile）
+        3. 没有 Chrome 在运行 → 直接用调试端口启动（同一 profile）
+
+        关键点：Chrome 的 profile 目录有锁机制，同一 user-data-dir 只能有一个实例。
+        所以必须先关闭已有 Chrome，再用 --remote-debugging-port 重新启动。
+        """
+        import urllib.request
+
+        port = self._cdp_url.split(":")[-1].rstrip("/")
+
+        # 1. 已有 CDP 端口开放 → 直接连接
         if self._check_cdp_available():
             info = self._get_cdp_browser_info()
             browser_name = info.get("Browser", "未知浏览器")
             logger.info("reuse 模式：已连接到用户浏览器 — %s", browser_name)
             return self._cdp_url
 
-        # 未检测到，给出明确指引
-        port = self._cdp_url.split(":")[-1].rstrip("/")
+        # 2. 查找本地浏览器
         browser_path = self._find_local_browser()
-        if browser_path:
-            exe_name = os.path.basename(browser_path)
-            hint = (
-                f"未检测到开启远程调试的浏览器（端口 {port}）。\n"
-                f"请用以下方式启动 Chrome：\n"
-                f'  "{browser_path}" --remote-debugging-port={port}\n'
-                f"或在 Chrome 地址栏访问 chrome://inspect/#remote-debugging 开启远程调试。\n"
-                f"然后重新点击「启动浏览器」。"
+        if not browser_path:
+            raise RuntimeError(
+                "未找到本地 Chrome/Edge 浏览器。\n"
+                "请安装 Chrome 或 Edge 后重试。"
             )
+
+        # 3. 获取用户真实的 profile 目录
+        original_user_data_dir = self._get_chrome_default_user_data_dir()
+        if not original_user_data_dir and "edge" in browser_path.lower():
+            original_user_data_dir = self._get_edge_default_user_data_dir()
+
+        if not original_user_data_dir:
+            raise RuntimeError(
+                "未找到 Chrome/Edge 的用户数据目录。\n"
+                "请确认已安装并至少运行过一次 Chrome 或 Edge。"
+            )
+
+        # 3.5 Chrome 新版不允许在默认 user-data-dir 上开启远程调试，
+        #     创建专用调试目录（通过 junction 共享原始 profile）
+        user_data_dir = self._prepare_debug_user_data_dir(original_user_data_dir)
+        logger.info("reuse 模式：使用调试专用 profile 目录: %s", user_data_dir)
+
+        # 4. 如果有 Chrome 正在运行 → 先关闭（否则 profile 被锁，无法以调试端口启动）
+        if self._is_chrome_running():
+            logger.info("reuse 模式：检测到 Chrome 正在运行，需要先关闭再以调试模式重启")
+            if not self._graceful_close_chrome(timeout=15):
+                raise RuntimeError(
+                    "无法关闭已运行的 Chrome 进程。\n"
+                    "请手动关闭所有 Chrome 窗口后重试。"
+                )
+            # 确保 profile 锁文件被释放
+            time.sleep(2)
+
+        # 5. 清理可能残留的旧调试端口占用
+        self._kill_debug_chrome_only(port)
+
+        # 5.5 确保端口已完全释放
+        for wait_i in range(10):
+            if not self._is_port_listening(int(port)):
+                break
+            logger.info("reuse 模式：端口 %s 仍被占用，等待释放...（%d/10）", port, wait_i + 1)
+            time.sleep(1)
         else:
-            hint = (
-                f"未检测到开启远程调试的浏览器（端口 {port}）。\n"
-                f"请先安装 Chrome/Edge 并以 --remote-debugging-port={port} 启动。"
+            owner = self._get_port_owner(int(port))
+            raise RuntimeError(
+                f"端口 {port} 被占用且无法释放（{owner}）。\n"
+                f"请手动关闭占用端口的进程后重试。"
             )
-        raise RuntimeError(hint)
+
+        # 6. 用调试端口 + 用户真实 profile 启动 Chrome
+        cmd = [
+            browser_path,
+            f"--remote-debugging-port={port}",
+            f"--user-data-dir={user_data_dir}",
+            "--no-first-run",
+            "--no-default-browser-check",
+            "--restore-last-session",  # 恢复上次的标签页
+            # 禁用 SharedWorker —— Playwright connect_over_cdp 在 attach 到
+            # shared_worker 类型的 target 时会断言失败导致 Node.js 进程崩溃
+            "--disable-features=SharedWorker",
+        ]
+
+        logger.info("reuse 模式：启动 Chrome（调试端口 %s，profile: %s）", port, user_data_dir)
+        logger.info("reuse 模式：启动命令: %s", " ".join(cmd))
+        # 捕获 stderr 用于诊断 CDP 端口问题
+        self._chrome_process = subprocess.Popen(
+            cmd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+        )
+
+        # 7. 等待调试端口就绪（Chrome 启动+加载 profile 可能需要较长时间）
+        max_attempts = 120  # 最多等 60 秒（120 * 0.5s）
+        port_ever_listened = False
+        for attempt in range(max_attempts):
+            time.sleep(0.5)
+            # 检查 Chrome 进程是否还活着
+            if self._chrome_process and self._chrome_process.poll() is not None:
+                stderr_output = ""
+                try:
+                    stderr_output = self._chrome_process.stderr.read().decode(
+                        errors="replace"
+                    )[:2000]
+                except Exception:
+                    pass
+                raise RuntimeError(
+                    f"Chrome 进程已退出（退出码 {self._chrome_process.returncode}）。\n"
+                    f"可能是 profile 目录被锁定或损坏。请关闭所有 Chrome 后重试。\n"
+                    f"Chrome stderr: {stderr_output}"
+                )
+
+            # 先用 socket 检测端口是否在监听
+            port_listening = self._is_port_listening(int(port))
+            if port_listening and not port_ever_listened:
+                port_ever_listened = True
+                logger.info("reuse 模式：检测到端口 %s 已在监听（TCP 层），等待 HTTP 就绪...", port)
+
+            try:
+                resp = urllib.request.urlopen(
+                    self._cdp_url + "/json/version", timeout=2,
+                )
+                resp.read()
+                info = self._get_cdp_browser_info()
+                browser_name = info.get("Browser", "Chrome")
+                logger.info("reuse 模式：Chrome 调试端口就绪 — %s（等待了 %.1fs）",
+                            browser_name, attempt * 0.5)
+                return self._cdp_url
+            except Exception:
+                if attempt % 10 == 9:
+                    logger.info(
+                        "reuse 模式：仍在等待 CDP 端口就绪...（已等 %.1fs，TCP端口%s）",
+                        (attempt + 1) * 0.5,
+                        "已监听" if port_ever_listened else "未监听",
+                    )
+                continue
+
+        # 超时 — 尝试读取 Chrome stderr 诊断信息
+        stderr_output = ""
+        try:
+            if self._chrome_process and self._chrome_process.stderr:
+                # Windows 上 pipe 的 read() 会阻塞，用线程读取
+                import io
+                buf = io.BytesIO()
+
+                def _drain():
+                    try:
+                        while True:
+                            chunk = self._chrome_process.stderr.read(1024)
+                            if not chunk:
+                                break
+                            buf.write(chunk)
+                    except Exception:
+                        pass
+
+                t = threading.Thread(target=_drain, daemon=True)
+                t.start()
+                t.join(timeout=2)
+                stderr_output = buf.getvalue().decode(errors="replace")[:2000]
+        except Exception:
+            pass
+
+        # 检查端口是否被其他进程占用
+        port_owner = self._get_port_owner(int(port))
+        diag_info = (
+            f"TCP端口{'已' if port_ever_listened else '未'}监听 | "
+            f"端口占用进程: {port_owner or '无'}"
+        )
+        if stderr_output:
+            diag_info += f" | Chrome stderr: {stderr_output[:500]}"
+
+        logger.error("reuse 模式：Chrome 启动超时！诊断信息: %s", diag_info)
+        raise RuntimeError(
+            f"Chrome 启动超时，调试端口 {port} 未就绪。\n"
+            f"诊断: {diag_info}\n"
+            f"请手动关闭所有 Chrome 后重试，或切换到「独立实例」模式。"
+        )
 
     def _connect_standalone(self) -> str:
         """standalone 模式：启动独立 Chrome 实例（空白 profile，不影响用户浏览器）。"""
@@ -234,6 +543,40 @@ class BrowserEngine:
                 continue
         raise RuntimeError(f"浏览器启动超时，调试端口 {self._cdp_url} 未就绪")
 
+    def _cdp_connect_with_retry(self, cdp_url: str, max_retries: int = 3) -> None:
+        """通过 CDP 连接浏览器，遇到 Playwright crash 时重试。
+
+        Playwright ``connect_over_cdp`` 在连接到含有 shared_worker 等
+        非标准 target 的浏览器时，可能因断言失败导致 Node.js 进程崩溃。
+        此方法会在崩溃后重建 Playwright 实例并重试连接。
+        """
+        last_exc: Exception | None = None
+        for attempt in range(1, max_retries + 1):
+            try:
+                self._browser = self._playwright.chromium.connect_over_cdp(cdp_url)
+                return
+            except Exception as exc:
+                last_exc = exc
+                logger.warning(
+                    "connect_over_cdp 失败（第 %d/%d 次）: %s",
+                    attempt, max_retries, exc,
+                )
+                # Playwright Node.js 进程可能已崩溃，需要重建
+                try:
+                    self._playwright.stop()
+                except Exception:
+                    pass
+                time.sleep(1)
+                self._playwright = sync_playwright().start()
+                self._owner_thread = threading.current_thread().ident
+
+        raise RuntimeError(
+            f"Playwright 连接 CDP ({cdp_url}) 多次失败。\n"
+            f"最后一次错误: {last_exc}\n"
+            f"可能是浏览器中有不兼容的 worker 类型。"
+            f"请关闭包含 GitHub 等使用 SharedWorker 的标签页后重试。"
+        )
+
     def start(self) -> "BrowserEngine":
         """启动浏览器。
 
@@ -252,7 +595,7 @@ class BrowserEngine:
             else:
                 cdp_url = self._connect_standalone()
 
-            self._browser = self._playwright.chromium.connect_over_cdp(cdp_url)
+            self._cdp_connect_with_retry(cdp_url)
 
             # 获取已有的 context 和 page，确保拿到一个可用的页面
             if self._browser.contexts:
@@ -306,7 +649,7 @@ class BrowserEngine:
         if self._playwright:
             self._playwright.stop()
 
-        # standalone 模式启动的 Chrome 进程需要关闭
+        # reuse/standalone 模式启动的 Chrome 进程需要关闭
         if self._chrome_process:
             try:
                 self._chrome_process.terminate()
@@ -340,7 +683,24 @@ class BrowserEngine:
         # 派发到拥有者线程
         result_q: queue.Queue = queue.Queue()
         self._call_queue.put((func, args, kwargs, result_q))
-        tag, value = result_q.get(timeout=30)
+        try:
+            tag, value = result_q.get(timeout=30)
+        except queue.Empty:
+            # 检测 Playwright 是否已 crash（Node.js 进程不在了）
+            pw_alive = False
+            try:
+                if self._playwright and self._playwright._connection._transport._proc:
+                    pw_alive = self._playwright._connection._transport._proc.poll() is None
+            except Exception:
+                pass
+            if not pw_alive:
+                raise RuntimeError(
+                    "Playwright 进程已崩溃，无法执行浏览器操作。\n"
+                    "请重新启动浏览器连接（点击'启动浏览器'）。"
+                )
+            raise RuntimeError(
+                "浏览器操作超时（30s），可能是页面加载过慢或连接断开。"
+            )
         if tag == "error":
             raise value
         return value

@@ -317,10 +317,9 @@
                         </button>
                     </div>
                     <div id="reuseHint" style="background:var(--surface2);border-radius:8px;padding:12px 16px;text-align:left;font-size:13px;max-width:520px;margin:0 auto">
-                        <p style="color:var(--warning);font-weight:600;margin-bottom:6px">📋 使用前请先开启 Chrome 远程调试：</p>
-                        <p style="color:var(--text-dim);margin-bottom:8px">关闭所有 Chrome 窗口，然后用以下命令启动：</p>
-                        <code id="launchCmd" style="display:block;background:var(--bg);padding:8px 12px;border-radius:6px;font-size:12px;word-break:break-all;cursor:pointer;border:1px solid var(--border)" onclick="copyLaunchCmd()" title="点击复制">加载中...</code>
-                        <p style="color:var(--text-dim);font-size:11px;margin-top:6px">💡 点击命令可复制。启动后浏览器就和平时一样使用，AI 能直接操作你的页面。</p>
+                        <p style="color:var(--success);font-weight:600;margin-bottom:6px">✨ 一键启动，自动保留登录态</p>
+                        <p style="color:var(--text-dim)">点击启动后，程序会<b>自动关闭当前 Chrome 并以调试模式重新打开</b>，使用你的真实账号数据（Cookie、书签、登录状态），并恢复之前的标签页。</p>
+                        <p style="color:var(--warning);margin-top:6px;font-size:12px">⚠️ 启动前请保存好 Chrome 中正在编辑的内容（如未提交的表单），Chrome 会被自动重启。</p>
                     </div>
                     <div id="standaloneHint" style="display:none;color:var(--text-dim);font-size:13px;max-width:420px;margin:0 auto">
                         <p>将启动一个独立的 Chrome 窗口（空白配置）。</p>
@@ -422,23 +421,14 @@
         }
 
         function copyLaunchCmd() {
-            if (!launchCmdText) return;
-            navigator.clipboard.writeText(launchCmdText).then(() => {
-                const el = document.getElementById('launchCmd');
-                const orig = el.textContent;
-                el.textContent = '✅ 已复制到剪贴板！';
-                setTimeout(() => { el.textContent = orig; }, 1500);
-            });
+            // 不再需要手动复制命令，保留空函数以防万一
         }
 
         async function loadLaunchHint() {
+            // reuse 模式现在自动启动，只需同步后端默认模式
             try {
                 const res = await fetch('/api/browser/launch-hint');
                 const data = await res.json();
-                launchCmdText = data.launch_cmd;
-                const el = document.getElementById('launchCmd');
-                if (el) el.textContent = data.launch_cmd;
-                // 同步后端默认模式
                 if (data.browser_mode) {
                     selectedMode = data.browser_mode;
                     selectMode(selectedMode);

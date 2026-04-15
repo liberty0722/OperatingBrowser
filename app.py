@@ -144,11 +144,19 @@ def api_browser_start():
 
     browser_thread = threading.Thread(target=browser_worker, daemon=True)
     browser_thread.start()
-    ready_event.wait(timeout=30)
+    # reuse 模式可能需要关闭 Chrome + 等待端口释放 + 重启 + 等待 CDP，给更长超时
+    wait_timeout = 90 if browser_mode == BROWSER_MODE_REUSE else 30
+    ready_event.wait(timeout=wait_timeout)
 
     if error_holder[0]:
         broadcast_event("browser", {"status": "error", "message": error_holder[0]})
         return jsonify({"error": error_holder[0]}), 500
+
+    # 检查是否真的启动成功（防止 ready_event 超时但无错误的情况）
+    if browser_engine is None or browser_engine._browser is None:
+        msg = "浏览器启动超时，请检查 Chrome 是否正常运行后重试。"
+        broadcast_event("browser", {"status": "error", "message": msg})
+        return jsonify({"error": msg}), 500
 
     broadcast_event("browser", {"status": "started", "mode": browser_mode})
     return jsonify({"success": True, "message": "浏览器已启动", "mode": browser_mode})
