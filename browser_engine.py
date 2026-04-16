@@ -31,6 +31,10 @@ class BrowserEngine:
     3. builtin: 使用 Playwright 内置 Chromium
     """
 
+    # 截图保留上限与操作历史上限
+    _MAX_SCREENSHOTS = 50
+    _MAX_ACTION_HISTORY = 500
+
     # 常见浏览器安装路径
     _CHROME_PATHS = [
         r"C:\Program Files\Google\Chrome\Application\chrome.exe",
@@ -50,6 +54,7 @@ class BrowserEngine:
         viewport_height: int = 720,
         browser_mode: str = BROWSER_MODE_REUSE,
         cdp_url: str = "http://127.0.0.1:9222",
+        cross_thread_timeout: float = 30.0,
         # 兼容旧参数
         use_local_browser: bool = True,
         connect_existing: bool = False,
@@ -58,6 +63,7 @@ class BrowserEngine:
         self._browser_type = browser_type
         self._viewport = {"width": viewport_width, "height": viewport_height}
         self._cdp_url = cdp_url
+        self._cross_thread_timeout = cross_thread_timeout
         # 新模式优先；如果显式传了 browser_mode 就用它，否则从旧参数推断
         self._browser_mode = browser_mode
         # 兼容旧 .env: 如果旧配置 CONNECT_EXISTING=true，映射到 reuse 模式
@@ -67,12 +73,16 @@ class BrowserEngine:
         self._browser: Optional[Browser] = None
         self._context: Optional[BrowserContext] = None
         self._page: Optional[Page] = None
+        self._pages: list = []  # 多标签页管理: [(page, label)]
+        self._active_tab_index: int = 0
         self._action_history: list[dict[str, Any]] = []
         self._chrome_process: Optional[subprocess.Popen] = None
         # 线程安全：所有 Playwright 操作必须在创建它的线程中执行
         self._owner_thread: Optional[int] = None
         self._call_queue: queue.Queue = queue.Queue()
         self._result_queue: queue.Queue = queue.Queue()
+        # 停止信号：由外部线程设置，owner 线程在 process_pending_calls 中检测
+        self._stop_requested = threading.Event()
 
     # ------------------------------------------------------------------
     # 生命周期
@@ -627,6 +637,9 @@ class BrowserEngine:
             self._page = self._context.new_page()
 
         self._record("start", {"browser": browser_label, "mode": self._browser_mode})
+        # 初始化多标签页列表
+        self._pages = [(self._page, self._page.url if self._page else "")]
+        self._active_tab_index = 0
         return self
 
     def stop(self) -> None:
@@ -658,13 +671,23 @@ class BrowserEngine:
             self._chrome_process = None
 
         self._page = None
+        self._pages = []
+        self._active_tab_index = 0
         self._context = None
         self._browser = None
         self._playwright = None
         self._owner_thread = None
 
     def process_pending_calls(self, timeout: float = 0.05) -> None:
-        """在拥有者线程中处理来自其他线程的挂起调用（线程安全桥）。"""
+        """在拥有者线程中处理来自其他线程的挂起调用（线程安全桥）。
+
+        当检测到停止信号时，在 owner 线程中执行 stop() 并返回。
+        """
+        # 优先检测停止信号
+        if self._stop_requested.is_set():
+            self.stop()
+            return
+
         try:
             func, args, kwargs, result_q = self._call_queue.get(timeout=timeout)
             try:
@@ -675,16 +698,25 @@ class BrowserEngine:
         except queue.Empty:
             pass
 
+    def request_stop(self) -> None:
+        """从任意线程安全地请求停止浏览器。
+
+        设置停止信号后，owner 线程在下一次 process_pending_calls 循环中
+        会检测到并在正确的线程里执行 stop()。
+        """
+        self._stop_requested.set()
+
     def _cross_thread_call(self, func, *args, **kwargs):
         """如果当前线程不是拥有者线程，通过队列派发调用。"""
         current = threading.current_thread().ident
         if self._owner_thread is None or current == self._owner_thread:
             return func(*args, **kwargs)
         # 派发到拥有者线程
+        timeout = self._cross_thread_timeout
         result_q: queue.Queue = queue.Queue()
         self._call_queue.put((func, args, kwargs, result_q))
         try:
-            tag, value = result_q.get(timeout=30)
+            tag, value = result_q.get(timeout=timeout)
         except queue.Empty:
             # 检测 Playwright 是否已 crash（Node.js 进程不在了）
             pw_alive = False
@@ -699,7 +731,7 @@ class BrowserEngine:
                     "请重新启动浏览器连接（点击'启动浏览器'）。"
                 )
             raise RuntimeError(
-                "浏览器操作超时（30s），可能是页面加载过慢或连接断开。"
+                f"浏览器操作超时（{timeout}s），可能是页面加载过慢或连接断开。"
             )
         if tag == "error":
             raise value
@@ -712,10 +744,122 @@ class BrowserEngine:
         return self._page
 
     @property
+    def is_connected(self) -> bool:
+        """浏览器是否已连接且可用。"""
+        return self._browser is not None
+
+    @property
     def history(self) -> list[dict[str, Any]]:
         return list(self._action_history)
 
     # ------------------------------------------------------------------
+    # 多标签页管理
+    # ------------------------------------------------------------------
+
+    def _sync_pages_list(self) -> None:
+        """同步内部 _pages 列表与 context.pages，保持一致性。"""
+        if self._context is None:
+            return
+        ctx_pages = self._context.pages
+        known = {id(p) for p, __ in self._pages}
+        for p in ctx_pages:
+            if id(p) not in known:
+                self._pages.append((p, ""))
+
+    def new_tab(self, url: str = "") -> dict:
+        """在当前 context 中打开新标签页，可选导航到 url。"""
+        def _do():
+            if self._context is None:
+                return {"error": "浏览器上下文未就绪"}
+            new_page = self._context.new_page()
+            label = url if url else "blank"
+            self._pages.append((new_page, label))
+            idx = len(self._pages) - 1
+            self._active_tab_index = idx
+            self._page = new_page
+            if url:
+                new_page.goto(url)
+                new_page.wait_for_load_state("domcontentloaded")
+            return {
+                "tab_index": idx,
+                "url": new_page.url,
+                "title": new_page.title(),
+                "total_tabs": len(self._pages),
+            }
+        return self._cross_thread_call(_do)
+
+    def switch_tab(self, index: int) -> dict:
+        """切换到指定索引的标签页。"""
+        def _do():
+            self._sync_pages_list()
+            if index < 0 or index >= len(self._pages):
+                return {"error": f"无效标签页索引: {index}，当前共 {len(self._pages)} 个标签页"}
+            page, __ = self._pages[index]
+            try:
+                page.title()
+            except Exception:
+                return {"error": f"标签页 {index} 已关闭或不可用"}
+            self._page = page
+            self._active_tab_index = index
+            page.bring_to_front()
+            return {
+                "tab_index": index,
+                "url": page.url,
+                "title": page.title(),
+                "total_tabs": len(self._pages),
+            }
+        return self._cross_thread_call(_do)
+
+    def close_tab(self, index: Optional[int] = None) -> dict:
+        """关闭指定索引的标签页（默认关闭当前标签页）。"""
+        def _do():
+            self._sync_pages_list()
+            target = index if index is not None else self._active_tab_index
+            if target < 0 or target >= len(self._pages):
+                return {"error": f"无效标签页索引: {target}"}
+            if len(self._pages) <= 1:
+                return {"error": "不能关闭最后一个标签页"}
+            page, __ = self._pages.pop(target)
+            try:
+                page.close()
+            except Exception:
+                pass
+            # 修正活跃索引
+            if self._active_tab_index >= len(self._pages):
+                self._active_tab_index = len(self._pages) - 1
+            if target <= self._active_tab_index and target != self._active_tab_index:
+                self._active_tab_index = max(0, self._active_tab_index - 1)
+            self._page = self._pages[self._active_tab_index][0]
+            return {
+                "closed_index": target,
+                "active_tab": self._active_tab_index,
+                "url": self._page.url,
+                "total_tabs": len(self._pages),
+            }
+        return self._cross_thread_call(_do)
+
+    def list_tabs(self) -> dict:
+        """列出所有打开的标签页信息。"""
+        def _do():
+            self._sync_pages_list()
+            tabs = []
+            for i, (p, label) in enumerate(self._pages):
+                try:
+                    tabs.append({
+                        "index": i,
+                        "url": p.url,
+                        "title": p.title(),
+                        "active": i == self._active_tab_index,
+                    })
+                except Exception:
+                    tabs.append({
+                        "index": i,
+                        "url": "closed",
+                        "title": label or "closed",
+                        "active": i == self._active_tab_index,
+                    })
+            return {"tabs": tabs, "active_tab": self._active_tab_index}
+        return self._cross_thread_call(_do)
     # 操作方法 —— 每个方法对应一类浏览器操作
     # ------------------------------------------------------------------
 
@@ -835,11 +979,34 @@ class BrowserEngine:
             filepath = os.path.join(screenshot_dir, filename)
             with open(filepath, "wb") as f:
                 f.write(buf.getvalue())
+
+            # 自动清理旧截图，保留最新 _MAX_SCREENSHOTS 张
+            self._cleanup_screenshots(screenshot_dir)
+
             return {"base64": b64, "file": filepath}
         result = self._cross_thread_call(_do)
         log_result = {"base64_length": len(result["base64"]), "file": result["file"]}
         self._record("screenshot", {"full_page": full_page}, log_result)
         return result
+
+    def _cleanup_screenshots(self, screenshot_dir: str) -> None:
+        """清理旧截图，保留最新的 _MAX_SCREENSHOTS 张。"""
+        try:
+            files = [
+                os.path.join(screenshot_dir, f)
+                for f in os.listdir(screenshot_dir)
+                if f.startswith("screenshot_") and f.endswith(".jpg")
+            ]
+            if len(files) <= self._MAX_SCREENSHOTS:
+                return
+            files.sort(key=os.path.getmtime)
+            for f in files[:-self._MAX_SCREENSHOTS]:
+                try:
+                    os.remove(f)
+                except OSError:
+                    pass
+        except Exception as exc:
+            logger.debug("清理截图时出错: %s", exc)
 
     def execute_js(self, script: str) -> dict:
         """在页面中执行 JavaScript 代码。"""
@@ -851,10 +1018,32 @@ class BrowserEngine:
         return result
 
     def wait(self, seconds: float = 1.0) -> dict:
-        """等待指定秒数。"""
-        time.sleep(seconds)
-        result = {"waited": seconds}
+        """等待指定秒数（线程安全）。"""
+        def _do():
+            time.sleep(seconds)
+            return {"waited": seconds}
+        result = self._cross_thread_call(_do)
         self._record("wait", {"seconds": seconds}, result)
+        return result
+
+    def hover(self, selector: str) -> dict:
+        """悬停在匹配选择器的元素上。"""
+        def _do():
+            self.page.hover(selector, timeout=5000)
+            time.sleep(0.3)
+            return {"selector": selector, "url": self.page.url}
+        result = self._cross_thread_call(_do)
+        self._record("hover", {"selector": selector}, result)
+        return result
+
+    def select_option(self, selector: str, value: str) -> dict:
+        """在下拉列表中选择指定值。"""
+        def _do():
+            self.page.select_option(selector, value, timeout=5000)
+            time.sleep(0.3)
+            return {"selector": selector, "value": value}
+        result = self._cross_thread_call(_do)
+        self._record("select_option", {"selector": selector, "value": value}, result)
         return result
 
     def back(self) -> dict:
@@ -1062,6 +1251,35 @@ class BrowserEngine:
             {
                 "type": "function",
                 "function": {
+                    "name": "hover",
+                    "description": "悬停在页面元素上",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "selector": {"type": "string", "description": "CSS选择器"},
+                        },
+                        "required": ["selector"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
+                    "name": "select_option",
+                    "description": "在下拉列表（select元素）中选择指定值",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "selector": {"type": "string", "description": "select元素的CSS选择器"},
+                            "value": {"type": "string", "description": "要选择的选项值"},
+                        },
+                        "required": ["selector", "value"],
+                    },
+                },
+            },
+            {
+                "type": "function",
+                "function": {
                     "name": "done",
                     "description": "任务完成，向用户报告结果。当你认为任务已经完成时调用此工具。",
                     "parameters": {
@@ -1091,6 +1309,13 @@ class BrowserEngine:
             "wait": lambda p: self.wait(p.get("seconds", 1.0)),
             "back": lambda p: self.back(),
             "forward": lambda p: self.forward(),
+            "hover": lambda p: self.hover(p["selector"]),
+            "select_option": lambda p: self.select_option(p["selector"], p["value"]),
+            # 多标签页操作
+            "new_tab": lambda p: self.new_tab(p.get("url", "")),
+            "switch_tab": lambda p: self.switch_tab(p["index"]),
+            "close_tab": lambda p: self.close_tab(p.get("index")),
+            "list_tabs": lambda p: self.list_tabs(),
         }
         handler = action_map.get(action_name)
         if handler is None:
@@ -1113,3 +1338,6 @@ class BrowserEngine:
             "result": result,
             "timestamp": time.time(),
         })
+        # 超出上限时丢弃最早的记录
+        if len(self._action_history) > self._MAX_ACTION_HISTORY:
+            self._action_history = self._action_history[-self._MAX_ACTION_HISTORY:]

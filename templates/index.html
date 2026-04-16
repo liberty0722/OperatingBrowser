@@ -197,23 +197,100 @@
             border-top: 1px solid var(--border);
             display: flex;
             gap: 8px;
+            align-items: flex-end;
         }
-        .input-area textarea {
+        .input-box {
             flex: 1;
             background: var(--bg);
             border: 1px solid var(--border);
             border-radius: 8px;
-            padding: 10px 12px;
+            min-height: 44px;
+            max-height: 160px;
+            overflow-y: auto;
+            cursor: text;
+            transition: border-color 0.2s;
+        }
+        .input-box:focus-within { border-color: var(--accent); }
+        .rich-input {
+            width: 100%;
+            min-height: 28px;
+            max-height: 140px;
+            padding: 8px 10px;
             color: var(--text);
             font-size: 14px;
-            resize: none;
-            outline: none;
             font-family: inherit;
-            min-height: 44px;
-            max-height: 120px;
+            line-height: 1.6;
+            outline: none;
+            white-space: pre-wrap;
+            word-break: break-word;
+            overflow-y: auto;
         }
-        .input-area textarea:focus { border-color: var(--accent); }
-        .input-area textarea::placeholder { color: var(--text-dim); }
+        .rich-input:empty::before {
+            content: attr(data-placeholder);
+            color: var(--text-dim);
+            pointer-events: none;
+        }
+        .rich-input .img-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            background: rgba(124,77,255,0.15);
+            border: 1px solid rgba(124,77,255,0.3);
+            border-radius: 4px;
+            padding: 2px 6px;
+            margin: 0 2px;
+            font-size: 12px;
+            color: var(--accent);
+            vertical-align: middle;
+            cursor: default;
+            position: relative;
+            line-height: 1.4;
+            user-select: all;
+        }
+        .rich-input .img-chip .chip-icon { font-size: 12px; }
+        .rich-input .img-chip .chip-name {
+            max-width: 120px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .rich-input .img-chip .chip-remove {
+            display: none;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: var(--danger);
+            color: #fff;
+            border: none;
+            font-size: 9px;
+            line-height: 14px;
+            text-align: center;
+            cursor: pointer;
+            padding: 0;
+            margin-left: 2px;
+            flex-shrink: 0;
+        }
+        .rich-input .img-chip:hover .chip-remove { display: inline-flex; }
+        .rich-input .img-chip .chip-preview {
+            display: none;
+            position: absolute;
+            bottom: calc(100% + 6px);
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 4px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+        }
+        .rich-input .img-chip:hover .chip-preview { display: block; }
+        .rich-input .img-chip .chip-preview img {
+            max-width: 200px;
+            max-height: 150px;
+            border-radius: 4px;
+            display: block;
+        }
 
         /* --- Settings Modal --- */
         .modal-overlay {
@@ -278,6 +355,285 @@
             0%, 80%, 100% { opacity: 0.3; }
             40% { opacity: 1; }
         }
+
+        /* --- Sidebar Tabs --- */
+        .sidebar-tabs {
+            display: flex;
+            border-bottom: 1px solid var(--border);
+        }
+        .sidebar-tab {
+            flex: 1;
+            padding: 12px 8px;
+            text-align: center;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text-dim);
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+            background: none;
+            border-top: none;
+            border-left: none;
+            border-right: none;
+        }
+        .sidebar-tab:hover { color: var(--text); background: var(--surface2); }
+        .sidebar-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+        .tab-content { display: none; flex-direction: column; flex: 1; overflow: hidden; }
+        .tab-content.active { display: flex; }
+
+        /* --- Workflow Panel --- */
+        .workflow-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .workflow-list::-webkit-scrollbar { width: 6px; }
+        .workflow-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+        .workflow-card {
+            background: var(--surface2);
+            border-radius: 8px;
+            padding: 10px 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 1px solid transparent;
+        }
+        .workflow-card:hover { border-color: var(--accent); }
+        .workflow-card .wf-name {
+            font-weight: 600;
+            font-size: 13px;
+            margin-bottom: 4px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .workflow-card .wf-meta {
+            font-size: 11px;
+            color: var(--text-dim);
+            display: flex;
+            gap: 12px;
+        }
+        .workflow-card .wf-actions {
+            display: flex;
+            gap: 6px;
+            margin-top: 8px;
+        }
+        .workflow-card .wf-actions .btn { padding: 4px 10px; font-size: 12px; }
+        .workflow-empty {
+            text-align: center;
+            color: var(--text-dim);
+            font-size: 13px;
+            padding: 32px 16px;
+        }
+        .workflow-toolbar {
+            padding: 8px;
+            border-top: 1px solid var(--border);
+        }
+        .wf-batch-check {
+            display: none;
+            margin-right: 8px;
+            width: 16px;
+            height: 16px;
+            accent-color: var(--accent);
+            cursor: pointer;
+            flex-shrink: 0;
+        }
+        .batch-mode .wf-batch-check { display: inline-block; }
+        .batch-mode .workflow-card { padding-left: 8px; }
+
+        /* --- Step Viewer/Editor --- */
+        .wf-steps-panel {
+            display: none;
+            margin-top: 8px;
+            border-top: 1px solid var(--border);
+            padding-top: 6px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .wf-steps-panel.active { display: block; }
+        .wf-step-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 6px;
+            padding: 4px 6px;
+            font-size: 11px;
+            border-radius: 4px;
+            margin-bottom: 2px;
+            background: var(--surface);
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .wf-step-item:hover { background: var(--bg); }
+        .wf-step-num {
+            min-width: 22px;
+            text-align: center;
+            color: var(--text-dim);
+            font-weight: 600;
+        }
+        .wf-step-action {
+            color: var(--accent);
+            font-weight: 600;
+            min-width: 60px;
+        }
+        .wf-step-params {
+            color: var(--text-dim);
+            flex: 1;
+            word-break: break-all;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .wf-step-edit {
+            display: none;
+            margin-top: 4px;
+            padding: 6px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 11px;
+        }
+        .wf-step-edit.active { display: block; }
+        .wf-step-edit textarea {
+            width: 100%;
+            min-height: 50px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            color: var(--text);
+            font-size: 11px;
+            font-family: monospace;
+            padding: 4px 6px;
+            resize: vertical;
+            outline: none;
+        }
+        .wf-step-edit textarea:focus { border-color: var(--accent); }
+        .wf-step-edit-actions {
+            display: flex;
+            gap: 4px;
+            margin-top: 4px;
+            justify-content: flex-end;
+        }
+
+        /* --- Save workflow modal --- */
+        .save-wf-bar {
+            display: none;
+            padding: 10px 12px;
+            background: #1a2a20;
+            border-top: 1px solid var(--success);
+            gap: 8px;
+            align-items: center;
+            font-size: 13px;
+        }
+        .save-wf-bar.active { display: flex; }
+        .save-wf-bar input {
+            flex: 1;
+            padding: 6px 10px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text);
+            font-size: 13px;
+            outline: none;
+        }
+        .save-wf-bar input:focus { border-color: var(--accent); }
+
+        /* --- Replay progress --- */
+        .replay-progress {
+            display: none;
+            padding: 8px 12px;
+            background: var(--surface2);
+            border-top: 1px solid var(--border);
+            font-size: 12px;
+            color: var(--text-dim);
+            align-items: center;
+            gap: 8px;
+        }
+        .replay-progress.active { display: flex; }
+        .replay-progress .progress-bar {
+            flex: 1;
+            height: 4px;
+            background: var(--border);
+            border-radius: 2px;
+            overflow: hidden;
+        }
+        .replay-progress .progress-fill {
+            height: 100%;
+            background: var(--accent);
+            border-radius: 2px;
+            transition: width 0.3s;
+            width: 0%;
+        }
+
+        /* --- Variables modal --- */
+        .var-group { margin-bottom: 10px; }
+        .var-group label { font-size: 12px; color: var(--text-dim); display: block; margin-bottom: 3px; }
+        .var-group input {
+            width: 100%;
+            padding: 6px 10px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text);
+            font-size: 13px;
+            outline: none;
+        }
+
+        /* --- Toast notifications --- */
+        .toast-container {
+            position: fixed;
+            top: 64px;
+            right: 24px;
+            z-index: 200;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            pointer-events: none;
+        }
+        .toast {
+            padding: 10px 16px;
+            border-radius: 8px;
+            font-size: 13px;
+            color: #fff;
+            pointer-events: auto;
+            animation: toastIn 0.3s ease, toastOut 0.3s ease 2.7s forwards;
+            max-width: 360px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+        .toast-success { background: var(--success); }
+        .toast-error { background: var(--danger); }
+        .toast-warning { background: var(--warning); color: #1a1a24; }
+        .toast-info { background: var(--accent); }
+        @keyframes toastIn { from { opacity: 0; transform: translateX(40px); } to { opacity: 1; transform: translateX(0); } }
+        @keyframes toastOut { from { opacity: 1; } to { opacity: 0; transform: translateY(-10px); } }
+
+        /* --- Log toolbar --- */
+        .log-toolbar {
+            display: flex;
+            gap: 4px;
+            padding: 4px 8px;
+            border-bottom: 1px solid var(--border);
+            align-items: center;
+        }
+        .log-toolbar .btn { padding: 3px 8px; font-size: 11px; }
+
+        /* --- Workflow search --- */
+        .workflow-search {
+            padding: 6px 8px;
+        }
+        .workflow-search input {
+            width: 100%;
+            padding: 6px 10px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text);
+            font-size: 12px;
+            outline: none;
+        }
+        .workflow-search input:focus { border-color: var(--accent); }
+        .workflow-search input::placeholder { color: var(--text-dim); }
     </style>
 </head>
 <body>
@@ -292,11 +648,13 @@
             </h1>
             <div class="header-actions">
                 <div class="status-dot" id="statusDot"></div>
-                <span class="status-label" id="statusLabel">浏览器未启动</span>
+                <span class="status-label" id="statusLabel">未启动</span>
                 <button class="btn btn-primary" id="btnStartBrowser" onclick="startBrowser()">启动浏览器</button>
                 <button class="btn btn-danger" id="btnStopBrowser" onclick="stopBrowser()" style="display:none">关闭浏览器</button>
-                <button class="btn btn-ghost" onclick="refreshScreenshot()">📷 截图</button>
-                <button class="btn btn-ghost" onclick="openSettings()">⚙️ 设置</button>
+                <button class="btn btn-ghost" id="btnStartDesktop" onclick="startDesktop()">启动桌面</button>
+                <button class="btn btn-danger" id="btnStopDesktop" onclick="stopDesktop()" style="display:none">关闭桌面</button>
+                <button class="btn btn-ghost" onclick="refreshScreenshot()">截图</button>
+                <button class="btn btn-ghost" onclick="openSettings()">设置</button>
             </div>
         </header>
 
@@ -334,18 +692,183 @@
 
         <!-- Sidebar -->
         <div class="sidebar">
-            <div class="sidebar-header">操作日志</div>
-            <div class="log-area" id="logArea"></div>
-            <div class="thinking" id="thinking">
-                <div class="thinking-dots"><span></span><span></span><span></span></div>
-                AI 正在思考...
+            <div class="sidebar-tabs">
+                <button class="sidebar-tab active" onclick="switchTab('log')">操作日志</button>
+                <button class="sidebar-tab" onclick="switchTab('workflows')">工作流</button>
+                <button class="sidebar-tab" onclick="switchTab('history')">执行历史</button>
+                <button class="sidebar-tab" onclick="switchTab('desktop')">桌面</button>
+                <button class="sidebar-tab" onclick="switchTab('webhooks')">Webhook</button>
+                <button class="sidebar-tab" onclick="switchTab('tabs')">标签页</button>
             </div>
-            <div class="input-area">
-                <textarea id="taskInput" placeholder="输入指令，如「打开百度搜索 AI 新闻」" rows="1"
-                    onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();submitTask()}"></textarea>
-                <button class="btn btn-primary" id="btnSubmit" onclick="submitTask()">发送</button>
+
+            <!-- Tab: 操作日志 -->
+            <div class="tab-content active" id="tabLog">
+                <div class="log-toolbar">
+                    <span style="font-size:11px;color:var(--text-dim);flex:1">操作日志</span>
+                    <button class="btn btn-ghost" onclick="exportLogs()" title="导出日志">📤 导出</button>
+                    <button class="btn btn-ghost" onclick="clearLogs()" title="清除日志">🗑 清除</button>
+                </div>
+                <div class="log-area" id="logArea"></div>
+                <div class="thinking" id="thinking">
+                    <div class="thinking-dots"><span></span><span></span><span></span></div>
+                    AI 正在思考...
+                </div>
+                <!-- 保存工作流条 -->
+                <div class="save-wf-bar" id="saveWfBar">
+                    <span style="color:var(--success)">可保存为工作流</span>
+                    <input type="text" id="saveWfName" placeholder="工作流名称">
+                    <label style="font-size:11px;display:flex;align-items:center;gap:4px;cursor:pointer;white-space:nowrap">
+                        <input type="checkbox" id="saveWfQuickRun" checked>
+                        <span>⚡一键执行</span>
+                    </label>
+                    <button class="btn btn-primary" onclick="saveWorkflow()" style="padding:6px 12px;font-size:12px">保存</button>
+                    <button class="btn btn-ghost" onclick="hideSaveBar()" style="padding:6px 8px;font-size:12px">×</button>
+                </div>
+                <div class="input-area">
+                    <div class="input-box" id="inputBox">
+                        <div class="rich-input" id="richInput" contenteditable="true"
+                            data-placeholder="输入指令，支持 Ctrl+V 粘贴图片（可多张）"
+                            onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();submitTask()}"></div>
+                    </div>
+                    <button class="btn btn-primary" id="btnSubmit" onclick="submitTask()">发送</button>
+                </div>
+            </div>
+
+            <!-- Tab: 工作流 -->
+            <div class="tab-content" id="tabWorkflows">
+                <div class="workflow-search">
+                    <input type="text" id="workflowSearch" placeholder="🔍 搜索工作流..." oninput="filterWorkflows()">
+                </div>
+                <div style="display:flex;gap:6px;padding:0 8px 8px 8px">
+                    <button class="btn btn-ghost" onclick="openImportModal()" style="font-size:12px;padding:5px 10px">📥 导入脚本</button>
+                    <button class="btn btn-ghost" id="btnBatchMode" onclick="toggleBatchMode()" style="font-size:12px;padding:5px 10px">☑ 批量选择</button>
+                    <button class="btn btn-danger" id="btnBatchDelete" onclick="batchDeleteWorkflows()" style="font-size:12px;padding:5px 10px;display:none">🗑 删除选中 (<span id="batchCount">0</span>)</button>
+                    <button class="btn btn-ghost" id="btnBatchCancel" onclick="toggleBatchMode()" style="font-size:12px;padding:5px 10px;display:none">取消</button>
+                </div>
+                <div class="workflow-list" id="workflowList">
+                    <div class="workflow-empty">暂无保存的工作流<br><span style="font-size:12px;margin-top:4px;display:block">执行 AI 任务后可保存为可重复执行的工作流</span></div>
+                </div>
+                <div class="replay-progress" id="replayProgress">
+                    <span id="replayLabel">回放中...</span>
+                    <div class="progress-bar"><div class="progress-fill" id="replayFill"></div></div>
+                    <span id="replayStep">0/0</span>
+                    <button class="btn btn-danger" onclick="stopReplay()" style="padding:3px 10px;font-size:11px;margin-left:6px">⏹ 停止</button>
+                </div>
+            </div>
+
+            <!-- Tab: 执行历史 -->
+            <div class="tab-content" id="tabHistory">
+                <div style="display:flex;gap:6px;padding:8px;align-items:center">
+                    <span style="font-size:11px;color:var(--text-dim);flex:1">执行历史</span>
+                    <button class="btn btn-ghost" onclick="loadExecutionHistory()" style="font-size:12px;padding:5px 10px">🔄 刷新</button>
+                    <button class="btn btn-ghost" onclick="clearAllHistory()" style="font-size:12px;padding:5px 10px">🗑 清空</button>
+                </div>
+                <div style="padding:0 8px 8px 8px">
+                    <select id="historyWorkflowFilter" onchange="loadExecutionHistory()" style="width:100%;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:12px">
+                        <option value="">全部工作流</option>
+                    </select>
+                </div>
+                <div class="workflow-list" id="historyList" style="flex:1;overflow-y:auto">
+                    <div class="workflow-empty">暂无执行记录</div>
+                </div>
+            </div>
+
+            <!-- Tab: 桌面自动化 -->
+            <div class="tab-content" id="tabDesktop">
+                <div style="display:flex;gap:6px;padding:8px;align-items:center">
+                    <span style="font-size:11px;color:var(--text-dim);flex:1">Windows 桌面自动化</span>
+                    <button class="btn btn-ghost" onclick="loadDesktopWindows()" style="font-size:12px;padding:5px 10px">刷新窗口</button>
+                </div>
+                <!-- 桌面引擎状态 -->
+                <div style="padding:0 8px 8px 8px">
+                    <div id="desktopStatusBar" style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--surface2);border-radius:6px;font-size:12px">
+                        <div id="desktopDot" style="width:8px;height:8px;border-radius:50%;background:var(--danger)"></div>
+                        <span id="desktopStatusText">桌面引擎未启动</span>
+                        <span style="flex:1"></span>
+                        <button class="btn btn-primary" id="btnDesktopStart" onclick="startDesktop()" style="font-size:11px;padding:4px 10px">启动</button>
+                        <button class="btn btn-danger" id="btnDesktopStop" onclick="stopDesktop()" style="font-size:11px;padding:4px 10px;display:none">停止</button>
+                    </div>
+                </div>
+                <!-- 操作模式切换 -->
+                <div style="padding:0 8px 8px 8px">
+                    <div style="display:flex;gap:6px">
+                        <button class="btn btn-primary" id="taskModeBrowser" onclick="setTaskMode('browser')" style="flex:1;font-size:12px;padding:6px">浏览器模式</button>
+                        <button class="btn btn-ghost" id="taskModeDesktop" onclick="setTaskMode('desktop')" style="flex:1;font-size:12px;padding:6px">桌面模式</button>
+                    </div>
+                    <div style="font-size:11px;color:var(--text-dim);margin-top:4px" id="taskModeHint">AI 任务将操作浏览器</div>
+                </div>
+                <!-- 快捷操作 -->
+                <div style="padding:0 8px 8px 8px">
+                    <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px">快捷操作</div>
+                    <div style="display:flex;flex-wrap:wrap;gap:4px">
+                        <button class="btn btn-ghost" onclick="desktopQuickAction('desktop_screenshot')" style="font-size:11px;padding:4px 8px">桌面截图</button>
+                        <button class="btn btn-ghost" onclick="desktopQuickAction('get_screen_size')" style="font-size:11px;padding:4px 8px">屏幕分辨率</button>
+                        <button class="btn btn-ghost" onclick="desktopQuickAction('get_mouse_position')" style="font-size:11px;padding:4px 8px">鼠标位置</button>
+                        <button class="btn btn-ghost" onclick="desktopLaunchApp()" style="font-size:11px;padding:4px 8px">启动应用</button>
+                    </div>
+                </div>
+                <!-- 窗口列表 -->
+                <div style="padding:0 8px 4px 8px;font-size:11px;color:var(--text-dim)">窗口列表</div>
+                <div class="workflow-list" id="desktopWindowsList" style="flex:1;overflow-y:auto">
+                    <div class="workflow-empty">启动桌面引擎后可查看窗口列表</div>
+                </div>
+            </div>
+
+            <!-- Tab: Webhook 管理 -->
+            <div class="tab-content" id="tabWebhooks">
+                <div style="display:flex;gap:6px;padding:8px;align-items:center">
+                    <span style="font-size:11px;color:var(--text-dim);flex:1">Webhook 通知</span>
+                    <button class="btn btn-ghost" onclick="loadWebhooks()" style="font-size:12px;padding:5px 10px">🔄 刷新</button>
+                    <button class="btn btn-primary" onclick="openWebhookForm()" style="font-size:12px;padding:5px 10px">+ 新建</button>
+                </div>
+                <div id="webhookForm" style="display:none;padding:0 8px 8px 8px">
+                    <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px">
+                        <input type="text" id="whName" placeholder="Webhook 名称" style="width:100%;padding:6px 8px;margin-bottom:6px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:12px">
+                        <input type="text" id="whUrl" placeholder="URL (https://...)" style="width:100%;padding:6px 8px;margin-bottom:6px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:12px">
+                        <div style="font-size:11px;color:var(--text-dim);margin-bottom:4px">触发事件:</div>
+                        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+                            <label style="font-size:11px;display:flex;align-items:center;gap:3px"><input type="checkbox" class="wh-event" value="replay_success" checked> 回放成功</label>
+                            <label style="font-size:11px;display:flex;align-items:center;gap:3px"><input type="checkbox" class="wh-event" value="replay_failed" checked> 回放失败</label>
+                            <label style="font-size:11px;display:flex;align-items:center;gap:3px"><input type="checkbox" class="wh-event" value="schedule_complete"> 定时完成</label>
+                        </div>
+                        <div style="display:flex;gap:6px">
+                            <button class="btn btn-primary" onclick="saveWebhookForm()" style="font-size:12px;padding:5px 12px">保存</button>
+                            <button class="btn btn-ghost" onclick="testWebhookUrl()" style="font-size:12px;padding:5px 12px">🧪 测试</button>
+                            <button class="btn btn-ghost" onclick="document.getElementById('webhookForm').style.display='none'" style="font-size:12px;padding:5px 12px">取消</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="workflow-list" id="webhookList" style="flex:1;overflow-y:auto">
+                    <div class="workflow-empty">暂无 Webhook 配置<br><span style="font-size:12px;margin-top:4px;display:block">添加 Webhook 以在工作流完成时收到通知</span></div>
+                </div>
+            </div>
+
+            <!-- Tab: 标签页管理 -->
+            <div class="tab-content" id="tabTabs">
+                <div style="display:flex;gap:6px;padding:8px;align-items:center">
+                    <span style="font-size:11px;color:var(--text-dim);flex:1">浏览器标签页</span>
+                    <button class="btn btn-ghost" onclick="loadBrowserTabs()" style="font-size:12px;padding:5px 10px">🔄 刷新</button>
+                    <button class="btn btn-primary" onclick="openNewTabForm()" style="font-size:12px;padding:5px 10px">+ 新标签页</button>
+                </div>
+                <div id="newTabForm" style="display:none;padding:0 8px 8px 8px">
+                    <div style="display:flex;gap:6px">
+                        <input type="text" id="newTabUrl" placeholder="URL (可选，留空为空白标签)" style="flex:1;padding:6px 8px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:12px">
+                        <button class="btn btn-primary" onclick="createNewTab()" style="font-size:12px;padding:5px 12px">打开</button>
+                    </div>
+                </div>
+                <div class="workflow-list" id="tabsList" style="flex:1;overflow-y:auto">
+                    <div class="workflow-empty">启动浏览器后可管理标签页</div>
+                </div>
             </div>
         </div>
+    </div>
+
+    <!-- Toast container -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- Version Modal -->
+    <div class="modal-overlay" id="versionModal">
+        <div class="modal" style="max-width:500px;max-height:70vh;overflow-y:auto"></div>
     </div>
 
     <!-- Settings Modal -->
@@ -392,10 +915,140 @@
         </div>
     </div>
 
+    <!-- Variables Modal (replay with parameters) -->
+    <div class="modal-overlay" id="variablesModal">
+        <div class="modal">
+            <h2>设置回放变量</h2>
+            <p style="font-size:13px;color:var(--text-dim);margin-bottom:12px">
+                修改下列参数值后点击「开始回放」。留空则使用原始录制值。
+            </p>
+            <div id="variablesForm"></div>
+            <div class="modal-actions">
+                <button class="btn btn-ghost" onclick="closeVariablesModal()">取消</button>
+                <button class="btn btn-primary" onclick="confirmReplay()">开始回放</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loop Replay Modal -->
+    <div class="modal-overlay" id="loopReplayModal">
+        <div class="modal">
+            <h2>🔁 循环回放设置</h2>
+            <p style="font-size:13px;color:var(--text-dim);margin-bottom:12px">
+                将已录制的操作自动应用到列表中的每一行。AI 会智能识别每行并调整选择器。
+            </p>
+            <div class="form-group" style="margin-bottom:12px">
+                <label style="font-size:13px;font-weight:600;margin-bottom:4px;display:block">行选择器 (CSS)</label>
+                <input type="text" id="loopRowSelector" placeholder="如: table tbody tr, .list-item, ul li"
+                    style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--bg-main);color:var(--text-main);font-family:monospace">
+                <span style="font-size:11px;color:var(--text-dim)">用于定位列表中的每一行</span>
+            </div>
+            <div class="form-group" style="margin-bottom:12px">
+                <label style="font-size:13px;font-weight:600;margin-bottom:4px;display:block">执行条件（可选）</label>
+                <input type="text" id="loopCondition" placeholder="如: 状态为待处理、金额大于1000、包含关键词"
+                    style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--bg-main);color:var(--text-main)">
+                <span style="font-size:11px;color:var(--text-dim)">留空 = 对所有行执行，AI 会用自然语言理解条件</span>
+            </div>
+            <div class="form-group" style="margin-bottom:12px">
+                <label style="font-size:13px;font-weight:600;margin-bottom:4px;display:block">最大行数</label>
+                <input type="number" id="loopMaxRows" value="50" min="1" max="500"
+                    style="width:100px;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--bg-main);color:var(--text-main)">
+            </div>
+            <div class="form-group" style="margin-bottom:12px">
+                <label style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer">
+                    <input type="checkbox" id="loopSaveConfig" checked>
+                    <span>保存配置为 <b>⚡ 一键执行</b>（下次无需重填参数）</span>
+                </label>
+            </div>
+            <div class="modal-actions">
+                <button class="btn btn-ghost" onclick="closeLoopReplayModal()">取消</button>
+                <button class="btn btn-primary" onclick="confirmLoopReplay()">🔁 开始循环回放</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Import Workflow Modal -->
+    <div class="modal-overlay" id="importModal">
+        <div class="modal" style="max-width:600px">
+            <h2>📥 导入自动化脚本</h2>
+            <p style="font-size:13px;color:var(--text-dim);margin-bottom:12px">
+                支持 JSON 工作流、Selenium 脚本、Playwright 脚本、文本指令。支持多文件和 ZIP 包导入（自动追踪 import 依赖）。
+            </p>
+
+            <!-- 导入方式选择 -->
+            <div style="display:flex;gap:8px;margin-bottom:14px">
+                <button class="btn btn-primary" id="importTabPaste" onclick="switchImportTab('paste')" style="font-size:12px;padding:5px 12px">📋 粘贴脚本</button>
+                <button class="btn btn-ghost" id="importTabFile" onclick="switchImportTab('file')" style="font-size:12px;padding:5px 12px">📁 上传文件</button>
+            </div>
+
+            <!-- 粘贴脚本 -->
+            <div id="importPasteArea">
+                <div class="form-group" style="margin-bottom:10px">
+                    <textarea id="importScriptContent" rows="10" placeholder="在此粘贴你的 Selenium / Playwright / JSON 脚本或文本指令&#10;&#10;示例1 (Selenium):&#10;driver.get('https://example.com')&#10;driver.find_element(By.ID, 'username').send_keys('test')&#10;driver.find_element(By.ID, 'login-btn').click()&#10;&#10;示例2 (文本指令):&#10;打开 https://example.com&#10;点击 '#login-btn'&#10;输入 'test' 到 '#username'&#10;等待 2 秒"
+                        style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-family:monospace;font-size:12px;resize:vertical"></textarea>
+                </div>
+            </div>
+
+            <!-- 上传文件（支持多文件、拖拽、ZIP） -->
+            <div id="importFileArea" style="display:none">
+                <div class="form-group" style="margin-bottom:10px">
+                    <div id="importDropZone" style="padding:24px;border:2px dashed var(--border);border-radius:8px;text-align:center;cursor:pointer;transition:border-color 0.2s,background 0.2s"
+                        onclick="document.getElementById('importFile').click()">
+                        <input type="file" id="importFile" accept=".json,.py,.txt,.js,.ts,.zip" multiple style="display:none" onchange="handleImportFileSelect(this)">
+                        <div style="font-size:24px;margin-bottom:8px">📁</div>
+                        <div style="font-size:13px;color:var(--text-dim)" id="importFileName">
+                            点击选择或拖拽文件到此处<br>
+                            <span style="font-size:11px">支持 .py / .json / .txt / .js / .zip（可选多个文件）</span>
+                        </div>
+                    </div>
+                    <!-- 已选文件列表 -->
+                    <div id="importFileList" style="display:none;margin-top:8px;max-height:120px;overflow-y:auto"></div>
+                </div>
+            </div>
+
+            <!-- 通用选项 -->
+            <div style="display:flex;gap:12px;margin-bottom:12px;align-items:center">
+                <div class="form-group" style="flex:1">
+                    <label style="font-size:12px;font-weight:600;margin-bottom:3px;display:block">工作流名称</label>
+                    <input type="text" id="importName" placeholder="自动从文件名/内容生成"
+                        style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-size:12px">
+                </div>
+                <div class="form-group">
+                    <label style="font-size:12px;font-weight:600;margin-bottom:3px;display:block">格式</label>
+                    <select id="importFormat" style="padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-size:12px">
+                        <option value="auto">自动检测</option>
+                        <option value="json">JSON 工作流</option>
+                        <option value="selenium">Selenium (Python)</option>
+                        <option value="playwright">Playwright (Python)</option>
+                        <option value="text">文本指令</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- 导入结果 + 预览 -->
+            <div id="importResult" style="display:none;margin-bottom:12px;padding:10px;border-radius:6px;font-size:12px"></div>
+            <div id="importPreview" style="display:none;margin-bottom:12px">
+                <div style="font-size:12px;font-weight:600;margin-bottom:4px;display:flex;justify-content:space-between;align-items:center">
+                    <span>📋 解析预览</span>
+                    <button class="btn btn-ghost" onclick="document.getElementById('importPreview').style.display='none'" style="padding:2px 6px;font-size:11px">收起</button>
+                </div>
+                <div id="importPreviewList" style="max-height:200px;overflow-y:auto;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:6px;font-size:11px;font-family:monospace"></div>
+            </div>
+
+            <div class="modal-actions">
+                <button class="btn btn-ghost" onclick="closeImportModal()">取消</button>
+                <button class="btn btn-ghost" id="importPreviewBtn" onclick="previewImport()" style="display:none">👁 预览</button>
+                <button class="btn btn-primary" id="importSubmitBtn" onclick="submitImport()">🚀 导入</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         let eventSource = null;
-        let selectedMode = 'reuse';  // 默认模式
+        let selectedMode = 'reuse';  // 默认浏览器模式
         let launchCmdText = '';
+        let currentTaskMode = 'browser';  // 'browser' | 'desktop'
+        let desktopRunning = false;
 
         // --- Mode selection ---
         function selectMode(mode) {
@@ -437,9 +1090,30 @@
         }
 
         // --- SSE ---
+        let sseRetryTimer = null;
+        let sseRetryDelay = 1000;
+        const SSE_MAX_RETRY_DELAY = 30000;
+
         function connectSSE() {
             if (eventSource) eventSource.close();
+            if (sseRetryTimer) { clearTimeout(sseRetryTimer); sseRetryTimer = null; }
             eventSource = new EventSource('/api/events');
+
+            eventSource.onopen = () => {
+                sseRetryDelay = 1000;  // 连接成功，重置重试间隔
+            };
+
+            eventSource.onerror = () => {
+                // EventSource 进入 CLOSED 状态时自动重连
+                if (eventSource.readyState === EventSource.CLOSED) {
+                    eventSource.close();
+                    eventSource = null;
+                    sseRetryTimer = setTimeout(() => {
+                        connectSSE();
+                        sseRetryDelay = Math.min(sseRetryDelay * 2, SSE_MAX_RETRY_DELAY);
+                    }, sseRetryDelay);
+                }
+            };
 
             eventSource.addEventListener('step', e => {
                 const data = JSON.parse(e.data);
@@ -454,6 +1128,10 @@
                 appendLog({ type: 'done', summary: data.summary || '任务完成' });
                 setThinking(false);
                 refreshScreenshot();
+                // 如果有可回放步骤，提示保存为工作流
+                if (data.playable_count > 0) {
+                    showSaveBar(data.playable_count);
+                }
             });
 
             eventSource.addEventListener('task_error', e => {
@@ -469,6 +1147,124 @@
                 } else {
                     updateBrowserStatus(data.status === 'started');
                 }
+            });
+
+            eventSource.addEventListener('replay_step', e => {
+                const data = JSON.parse(e.data);
+                updateReplayProgress(data);
+                // 显示 AI 智能修复信息
+                if (data.ai_fix) {
+                    appendLog({
+                        type: 'message',
+                        content: `🤖 AI 智能修复: "${data.ai_fix.original_selector}" → "${data.ai_fix.new_selector}" (置信度 ${Math.round(data.ai_fix.confidence * 100)}%, ${data.ai_fix.reason})`,
+                    });
+                }
+                appendLog({
+                    type: 'action',
+                    action: (data.ai_fix ? '🔧 ' : '▶ ') + data.action,
+                    params: data.params,
+                    result: data.result,
+                });
+                if (data.action === 'goto' || data.action === 'click') {
+                    refreshScreenshot();
+                }
+            });
+
+            eventSource.addEventListener('replay_complete', e => {
+                const data = JSON.parse(e.data);
+                hideReplayProgress();
+                let summary = data.summary || '工作流回放完成';
+                appendLog({ type: 'done', summary });
+                refreshScreenshot();
+                loadWorkflows();
+            });
+
+            eventSource.addEventListener('replay_error', e => {
+                const data = JSON.parse(e.data);
+                hideReplayProgress();
+                appendLog({ type: 'error', content: '回放失败: ' + (data.error || '未知错误') });
+                refreshScreenshot();
+            });
+
+            eventSource.addEventListener('replay_stopped', e => {
+                hideReplayProgress();
+                appendLog({ type: 'message', content: '⏹ 回放已停止' });
+                refreshScreenshot();
+            });
+
+            // 循环回放事件
+            eventSource.addEventListener('loop_replay_step', e => {
+                const data = JSON.parse(e.data);
+                if (data.type === 'loop_overview') {
+                    appendLog({ type: 'message', content: `🔁 循环回放: 行选择器="${data.row_selector}", 条件="${data.condition}", 模板 ${data.template_steps_count} 步` });
+                } else if (data.type === 'loop_row') {
+                    const status = data.status || 'processing';
+                    const icon = status === 'skipped' ? '⏭️' : status === 'failed' ? '❌' : status === 'done' ? '✅' : '🔄';
+                    let msg = `${icon} 第 ${data.row_index} 行: ${data.row_text || '(无文本)'}`;
+                    if (data.condition_match === false) {
+                        msg += ` — 跳过 (${data.condition_reason || '不匹配'})`;
+                    }
+                    if (data.status === 'failed' && data.error) {
+                        msg += ` — ${data.error}`;
+                    }
+                    appendLog({ type: 'message', content: msg });
+                    refreshScreenshot();
+                } else if (data.type === 'loop_action') {
+                    appendLog({
+                        type: 'action',
+                        action: `🔁 行${data.row_index} 步${data.step_index}: ${data.action}`,
+                        params: data.params,
+                        result: data.result,
+                    });
+                    if (data.action === 'click' || data.action === 'goto') {
+                        refreshScreenshot();
+                    }
+                }
+            });
+
+            eventSource.addEventListener('loop_replay_complete', e => {
+                const data = JSON.parse(e.data);
+                const summary = data.summary || '循环回放完成';
+                appendLog({ type: 'done', summary: `🔁 ${summary}` });
+                refreshScreenshot();
+                loadWorkflows();
+            });
+
+            eventSource.addEventListener('loop_replay_error', e => {
+                const data = JSON.parse(e.data);
+                appendLog({ type: 'error', content: '循环回放失败: ' + (data.error || '未知错误') });
+                refreshScreenshot();
+            });
+
+            eventSource.addEventListener('import_validate_progress', e => {
+                const data = JSON.parse(e.data);
+                appendLog({ type: 'message', content: '🔧 验证步骤 ' + (data.index + 1) + '/' + data.total + ': ' + data.action });
+            });
+
+            eventSource.addEventListener('import_validate_complete', e => {
+                const data = JSON.parse(e.data);
+                let msg = '🔧 验证完成: ' + data.total + ' 步 — ';
+                msg += '✅ 有效 ' + data.valid;
+                if (data.fixed > 0) msg += ' | 🔧 AI修复 ' + data.fixed;
+                if (data.failed > 0) msg += ' | ❌ 失败 ' + data.failed;
+                appendLog({ type: 'done', summary: msg });
+                if (data.fixed > 0) {
+                    appendLog({ type: 'message', content: '已自动更新修复后的步骤到工作流' });
+                }
+                if (data.failed > 0) {
+                    const failedDetails = (data.details || []).filter(d => d.status === 'failed');
+                    failedDetails.forEach(d => {
+                        appendLog({ type: 'error', content: '步骤 ' + (d.index + 1) + ' (' + d.action + '): ' + (d.message || '修复失败') });
+                    });
+                    appendLog({ type: 'message', content: '💡 提示: 导航到正确的页面后重新运行「🔧 AI 验证修复」可获得更好的修复效果' });
+                }
+                loadWorkflows();
+                refreshScreenshot();
+            });
+
+            eventSource.addEventListener('import_validate_error', e => {
+                const data = JSON.parse(e.data);
+                appendLog({ type: 'error', content: '验证修复失败: ' + (data.error || '未知错误') });
             });
         }
 
@@ -550,20 +1346,237 @@
 
         function updateBrowserStatus(running) {
             document.getElementById('statusDot').className = 'status-dot' + (running ? ' active' : '');
-            document.getElementById('statusLabel').textContent = running ? '浏览器运行中' : '浏览器未启动';
+            document.getElementById('statusLabel').textContent = running
+                ? (desktopRunning ? '浏览器+桌面运行中' : '浏览器运行中')
+                : (desktopRunning ? '桌面引擎运行中' : '未启动');
             document.getElementById('btnStartBrowser').style.display = running ? 'none' : '';
             document.getElementById('btnStopBrowser').style.display = running ? '' : 'none';
         }
 
         async function refreshScreenshot() {
             try {
-                const res = await fetch('/api/browser/screenshot');
-                const data = await res.json();
-                if (data.base64) {
-                    document.getElementById('screenshotArea').innerHTML =
-                        `<img src="data:image/jpeg;base64,${data.base64}" alt="screenshot">`;
+                if (currentTaskMode === 'desktop' && desktopRunning) {
+                    const res = await fetch('/api/desktop/screenshot');
+                    const data = await res.json();
+                    if (data.base64) {
+                        document.getElementById('screenshotArea').innerHTML =
+                            `<img src="data:image/jpeg;base64,${data.base64}" alt="desktop screenshot">`;
+                    }
+                } else {
+                    const res = await fetch('/api/browser/screenshot');
+                    const data = await res.json();
+                    if (data.base64) {
+                        document.getElementById('screenshotArea').innerHTML =
+                            `<img src="data:image/jpeg;base64,${data.base64}" alt="screenshot">`;
+                    }
                 }
             } catch (e) { /* ignore */ }
+        }
+
+        // --- Desktop Engine ---
+        async function startDesktop() {
+            try {
+                appendLog({ type: 'message', content: '正在启动桌面引擎...' });
+                const res = await fetch('/api/desktop/start', { method: 'POST' });
+                const data = await res.json();
+                if (data.success) {
+                    updateDesktopStatus(true);
+                    appendLog({ type: 'done', summary: `桌面引擎已启动 (${data.screen_width}x${data.screen_height})` });
+                    loadDesktopWindows();
+                } else {
+                    appendLog({ type: 'error', content: data.error || '启动失败' });
+                }
+            } catch (e) {
+                appendLog({ type: 'error', content: '启动桌面引擎失败: ' + e.message });
+            }
+        }
+
+        async function stopDesktop() {
+            try {
+                await fetch('/api/desktop/stop', { method: 'POST' });
+                updateDesktopStatus(false);
+                appendLog({ type: 'message', content: '桌面引擎已停止' });
+            } catch (e) {
+                appendLog({ type: 'error', content: '停止失败: ' + e.message });
+            }
+        }
+
+        function updateDesktopStatus(running) {
+            desktopRunning = running;
+            const dot = document.getElementById('desktopDot');
+            const txt = document.getElementById('desktopStatusText');
+            const startBtn = document.getElementById('btnDesktopStart');
+            const stopBtn = document.getElementById('btnDesktopStop');
+            const hdrStart = document.getElementById('btnStartDesktop');
+            const hdrStop = document.getElementById('btnStopDesktop');
+            if (dot) dot.style.background = running ? 'var(--success)' : 'var(--danger)';
+            if (txt) txt.textContent = running ? '桌面引擎运行中' : '桌面引擎未启动';
+            if (startBtn) startBtn.style.display = running ? 'none' : '';
+            if (stopBtn) stopBtn.style.display = running ? '' : 'none';
+            if (hdrStart) hdrStart.style.display = running ? 'none' : '';
+            if (hdrStop) hdrStop.style.display = running ? '' : 'none';
+            // 更新整体状态标签
+            const browserActive = document.getElementById('btnStopBrowser').style.display !== 'none';
+            const label = document.getElementById('statusLabel');
+            if (label) {
+                if (browserActive && running) label.textContent = '浏览器+桌面运行中';
+                else if (browserActive) label.textContent = '浏览器运行中';
+                else if (running) label.textContent = '桌面引擎运行中';
+                else label.textContent = '未启动';
+            }
+            const statusDot = document.getElementById('statusDot');
+            if (statusDot) statusDot.className = 'status-dot' + ((browserActive || running) ? ' active' : '');
+        }
+
+        function setTaskMode(mode) {
+            currentTaskMode = mode;
+            const browserBtn = document.getElementById('taskModeBrowser');
+            const desktopBtn = document.getElementById('taskModeDesktop');
+            const hint = document.getElementById('taskModeHint');
+            if (mode === 'desktop') {
+                browserBtn.className = 'btn btn-ghost';
+                desktopBtn.className = 'btn btn-primary';
+                if (hint) hint.textContent = 'AI 任务将操作 Windows 桌面应用';
+            } else {
+                browserBtn.className = 'btn btn-primary';
+                desktopBtn.className = 'btn btn-ghost';
+                if (hint) hint.textContent = 'AI 任务将操作浏览器';
+            }
+        }
+
+        async function ensureDesktopRunning() {
+            try {
+                const res = await fetch('/api/desktop/status');
+                const data = await res.json();
+                if (data.running) {
+                    updateDesktopStatus(true);
+                    return true;
+                }
+                // 自动启动
+                appendLog({ type: 'message', content: '桌面引擎未运行，自动启动...' });
+                const startRes = await fetch('/api/desktop/start', { method: 'POST' });
+                const startData = await startRes.json();
+                if (startData.success) {
+                    updateDesktopStatus(true);
+                    return true;
+                }
+                appendLog({ type: 'error', content: startData.error || '自动启动桌面引擎失败' });
+                return false;
+            } catch (e) {
+                appendLog({ type: 'error', content: '检查桌面引擎状态失败: ' + e.message });
+                return false;
+            }
+        }
+
+        async function loadDesktopWindows() {
+            const list = document.getElementById('desktopWindowsList');
+            if (!desktopRunning) {
+                list.innerHTML = '<div class="workflow-empty">启动桌面引擎后可查看窗口列表</div>';
+                return;
+            }
+            try {
+                const res = await fetch('/api/desktop/windows');
+                const data = await res.json();
+                if (!data.success) {
+                    list.innerHTML = '<div class="workflow-empty">' + (data.error || '加载失败') + '</div>';
+                    return;
+                }
+                if (!data.windows || data.windows.length === 0) {
+                    list.innerHTML = '<div class="workflow-empty">没有找到可见窗口</div>';
+                    return;
+                }
+                list.innerHTML = data.windows.map(w => {
+                    const title = escapeHtml(w.title) || '(无标题)';
+                    const cls = escapeHtml(w.class_name || '');
+                    const handle = w.handle || 0;
+                    return `<div class="workflow-card" style="padding:8px 12px;cursor:pointer" onclick="focusDesktopWindow('${escapeHtml(w.title)}', ${handle})">
+                        <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${title}</div>
+                        <div style="font-size:11px;color:var(--text-dim)">${cls} | Handle: ${handle}</div>
+                    </div>`;
+                }).join('');
+            } catch (e) {
+                list.innerHTML = '<div class="workflow-empty">加载窗口列表失败</div>';
+            }
+        }
+
+        async function focusDesktopWindow(title, handle) {
+            try {
+                const res = await fetch('/api/desktop/focus', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title, handle }),
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast('已聚焦窗口: ' + (data.title || title), 'success');
+                    // 截取桌面截图
+                    setTimeout(async () => {
+                        const ssRes = await fetch('/api/desktop/screenshot');
+                        const ssData = await ssRes.json();
+                        if (ssData.base64) {
+                            document.getElementById('screenshotArea').innerHTML =
+                                `<img src="data:image/jpeg;base64,${ssData.base64}" alt="desktop">`;
+                        }
+                    }, 500);
+                } else {
+                    showToast(data.error || '聚焦失败', 'error');
+                }
+            } catch (e) {
+                showToast('聚焦窗口失败', 'error');
+            }
+        }
+
+        async function desktopQuickAction(action) {
+            if (!desktopRunning) {
+                showToast('请先启动桌面引擎', 'error');
+                return;
+            }
+            try {
+                const res = await fetch('/api/desktop/action', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action, params: {} }),
+                });
+                const data = await res.json();
+                if (data.error) {
+                    showToast(data.error, 'error');
+                    return;
+                }
+                if (data.base64) {
+                    document.getElementById('screenshotArea').innerHTML =
+                        `<img src="data:image/jpeg;base64,${data.base64}" alt="desktop">`;
+                    showToast('桌面截图已更新', 'success');
+                } else if (data.width !== undefined) {
+                    showToast(`屏幕分辨率: ${data.width} x ${data.height}`, 'success');
+                } else if (data.x !== undefined) {
+                    showToast(`鼠标位置: (${data.x}, ${data.y})`, 'success');
+                } else {
+                    showToast(JSON.stringify(data), 'success');
+                }
+            } catch (e) {
+                showToast('操作失败: ' + e.message, 'error');
+            }
+        }
+
+        async function desktopLaunchApp() {
+            const appPath = prompt('请输入应用程序路径或名称\n\n示例:\n  notepad\n  calc\n  mspaint\n  C:\\\\Program Files\\\\...\\\\app.exe');
+            if (!appPath) return;
+            try {
+                const res = await fetch('/api/desktop/action', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'launch_app', params: { path: appPath } }),
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast('已启动: ' + appPath, 'success');
+                    setTimeout(loadDesktopWindows, 2500);
+                } else {
+                    showToast(data.error || '启动失败', 'error');
+                }
+            } catch (e) {
+                showToast('启动应用失败', 'error');
+            }
         }
 
         // --- Task ---
@@ -598,26 +1611,138 @@
             }
         }
 
-        async function submitTask() {
-            const input = document.getElementById('taskInput');
-            const task = input.value.trim();
-            if (!task) return;
+        // --- 富文本输入 + 内联图片支持 ---
+        let pastedImages = [];  // [{id, base64}]
+        let imgIdCounter = 0;
 
-            input.value = '';
-            appendLog({ type: 'message', content: `📋 任务: ${task}` });
+        const richInput = document.getElementById('richInput');
+
+        richInput.addEventListener('paste', function(e) {
+            const items = (e.clipboardData || e.originalEvent.clipboardData).items;
+            let hasImage = false;
+            for (const item of items) {
+                if (item.type.indexOf('image') !== -1) {
+                    hasImage = true;
+                    e.preventDefault();
+                    const blob = item.getAsFile();
+                    const reader = new FileReader();
+                    reader.onload = function(evt) {
+                        insertImageChip(evt.target.result);
+                    };
+                    reader.readAsDataURL(blob);
+                }
+            }
+            if (!hasImage) {
+                // 纯文本粘贴：只保留纯文本，去掉 HTML 格式
+                e.preventDefault();
+                const text = (e.clipboardData || e.originalEvent.clipboardData).getData('text/plain');
+                document.execCommand('insertText', false, text);
+            }
+        });
+
+        function insertImageChip(base64) {
+            const id = 'pimg_' + (++imgIdCounter);
+            const name = 'image_' + id.replace('pimg_', '') + '.png';
+            pastedImages.push({ id, base64 });
+
+            const chip = document.createElement('span');
+            chip.className = 'img-chip';
+            chip.id = id;
+            chip.contentEditable = 'false';
+            chip.innerHTML = `<span class="chip-icon">🖼</span><span class="chip-name">${name}</span><button class="chip-remove" onclick="removeImageChip('${id}')" title="移除">×</button><span class="chip-preview"><img src="${base64}" alt="预览"></span>`;
+
+            // 在当前光标位置插入
+            const selection = window.getSelection();
+            if (selection.rangeCount > 0) {
+                const range = selection.getRangeAt(0);
+                // 确保在 richInput 内
+                if (richInput.contains(range.commonAncestorContainer)) {
+                    range.deleteContents();
+                    range.insertNode(chip);
+                    // 光标移到 chip 后面
+                    range.setStartAfter(chip);
+                    range.setEndAfter(chip);
+                    selection.removeAllRanges();
+                    selection.addRange(range);
+                } else {
+                    richInput.appendChild(chip);
+                }
+            } else {
+                richInput.appendChild(chip);
+            }
+            richInput.focus();
+        }
+
+        function removeImageChip(id) {
+            pastedImages = pastedImages.filter(img => img.id !== id);
+            const el = document.getElementById(id);
+            if (el) el.remove();
+            richInput.focus();
+        }
+
+        function getRichInputData() {
+            // 提取纯文本（忽略图片 chip）和图片列表
+            let text = '';
+            const images = [];
+            richInput.childNodes.forEach(node => {
+                if (node.nodeType === Node.TEXT_NODE) {
+                    text += node.textContent;
+                } else if (node.nodeType === Node.ELEMENT_NODE) {
+                    if (node.classList && node.classList.contains('img-chip')) {
+                        const imgData = pastedImages.find(img => img.id === node.id);
+                        if (imgData) images.push(imgData.base64);
+                    } else if (node.tagName === 'BR') {
+                        text += '\n';
+                    } else {
+                        // 其他块级元素（如 div），提取文本
+                        text += node.textContent;
+                    }
+                }
+            });
+            return { text: text.trim(), images };
+        }
+
+        function clearRichInput() {
+            richInput.innerHTML = '';
+            pastedImages = [];
+        }
+
+        async function submitTask() {
+            const { text: task, images } = getRichInputData();
+            if (!task && images.length === 0) return;
+
+            clearRichInput();
+
+            const modeLabel = currentTaskMode === 'desktop' ? '桌面' : '浏览器';
+            const imgInfo = images.length > 0 ? ` 📎${images.length}张图片` : '';
+            appendLog({ type: 'message', content: `[${modeLabel}] 任务: ${task || '(图片)'}${imgInfo}` });
             setThinking(true);
 
-            const browserReady = await ensureBrowserRunning();
-            if (!browserReady) {
-                appendLog({ type: 'error', content: '浏览器未就绪，无法执行任务' });
-                setThinking(false);
-                return;
+            if (currentTaskMode === 'desktop') {
+                const desktopReady = await ensureDesktopRunning();
+                if (!desktopReady) {
+                    appendLog({ type: 'error', content: '桌面引擎未就绪，无法执行任务' });
+                    setThinking(false);
+                    return;
+                }
+            } else {
+                const browserReady = await ensureBrowserRunning();
+                if (!browserReady) {
+                    appendLog({ type: 'error', content: '浏览器未就绪，无法执行任务' });
+                    setThinking(false);
+                    return;
+                }
+            }
+
+            const payload = { task: task || '请看我提供的图片并完成相关操作', mode: currentTaskMode };
+            if (images.length > 0) {
+                payload.images = images;
             }
 
             const res = await fetch('/api/task/run', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ task }),
+                body: JSON.stringify(payload),
             });
             const data = await res.json();
             if (data.error) {
@@ -670,17 +1795,1470 @@
             selectMode(selectedMode);
         }
 
+        // --- Utility functions ---
+        function escapeHtml(str) {
+            if (!str) return '';
+            return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        }
+
+        // --- Sidebar Tab switching ---
+        function switchTab(tab) {
+            document.querySelectorAll('.sidebar-tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            const tabs = document.querySelectorAll('.sidebar-tab');
+            const tabMap = {
+                'log': { idx: 0, el: 'tabLog', onShow: null },
+                'workflows': { idx: 1, el: 'tabWorkflows', onShow: () => loadWorkflows() },
+                'history': { idx: 2, el: 'tabHistory', onShow: () => loadExecutionHistory() },
+                'desktop': { idx: 3, el: 'tabDesktop', onShow: () => loadDesktopWindows() },
+                'webhooks': { idx: 4, el: 'tabWebhooks', onShow: () => loadWebhooks() },
+                'tabs': { idx: 5, el: 'tabTabs', onShow: () => loadBrowserTabs() },
+            };
+            const cfg = tabMap[tab];
+            if (cfg && tabs[cfg.idx]) {
+                tabs[cfg.idx].classList.add('active');
+                document.getElementById(cfg.el).classList.add('active');
+                if (cfg.onShow) cfg.onShow();
+            }
+        }
+
+        // --- Execution History functions ---
+
+        async function loadExecutionHistory() {
+            const filter = document.getElementById('historyWorkflowFilter').value;
+            const qs = filter ? `?workflow_id=${encodeURIComponent(filter)}&limit=100` : '?limit=100';
+            try {
+                const resp = await fetch(`/api/execution-history${qs}`);
+                const data = await resp.json();
+                if (!data.success) { showToast(data.error || '加载失败', 'error'); return; }
+                renderHistoryList(data.records || []);
+                updateHistoryFilter(data.records || []);
+            } catch (e) {
+                showToast('加载执行历史失败', 'error');
+            }
+        }
+
+        function updateHistoryFilter(records) {
+            const sel = document.getElementById('historyWorkflowFilter');
+            const current = sel.value;
+            const names = new Map();
+            records.forEach(r => {
+                if (r.workflow_id && r.workflow_name) names.set(r.workflow_id, r.workflow_name);
+            });
+            // 保留"全部"选项，仅在没有多余选项时重建
+            if (sel.options.length - 1 !== names.size) {
+                while (sel.options.length > 1) sel.remove(1);
+                names.forEach((name, id) => {
+                    const opt = document.createElement('option');
+                    opt.value = id; opt.textContent = name;
+                    sel.appendChild(opt);
+                });
+                sel.value = current;
+            }
+        }
+
+        function renderHistoryList(records) {
+            const container = document.getElementById('historyList');
+            if (!records.length) {
+                container.innerHTML = '<div class="workflow-empty">暂无执行记录</div>';
+                return;
+            }
+            const statusMap = {success:'✅ 成功', failed:'❌ 失败', cancelled:'⏹ 取消', partial:'⚠️ 部分成功'};
+            const statusColorMap = {success:'#4caf50', failed:'#f44336', cancelled:'#ff9800', partial:'#ff9800'};
+            container.innerHTML = records.map(r => {
+                const st = statusMap[r.status] || r.status;
+                const clr = statusColorMap[r.status] || 'var(--text-dim)';
+                const dur = r.duration != null ? r.duration.toFixed(1) + 's' : '-';
+                const dt = r.end_time ? new Date(r.end_time * 1000).toLocaleString('zh-CN') : '-';
+                const type = r.replay_type === 'loop' ? '🔁 循环' : '▶ 简单';
+                return `<div class="workflow-item" style="cursor:pointer;padding:10px 12px" onclick="viewHistoryRecord('${r.id}')">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+                        <span style="font-weight:600;font-size:13px">${escapeHtml(r.workflow_name || '未命名')}</span>
+                        <span style="font-size:11px;color:${clr};font-weight:500">${st}</span>
+                    </div>
+                    <div style="display:flex;gap:10px;font-size:11px;color:var(--text-dim)">
+                        <span>${type}</span>
+                        <span>⏱ ${dur}</span>
+                        <span>${dt}</span>
+                    </div>
+                    <div style="position:absolute;top:6px;right:6px">
+                        <button class="btn btn-ghost" onclick="event.stopPropagation();deleteHistoryRecord('${r.id}')" style="font-size:10px;padding:2px 6px" title="删除">🗑</button>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        async function viewHistoryRecord(id) {
+            try {
+                const resp = await fetch(`/api/execution-history/${id}`);
+                const data = await resp.json();
+                if (!data.success) { showToast(data.error || '加载失败', 'error'); return; }
+                const r = data.record;
+                const statusMap = {success:'成功', failed:'失败', cancelled:'已取消', partial:'部分成功'};
+                const dur = r.duration != null ? r.duration.toFixed(1) + 's' : '-';
+                const dt = r.end_time ? new Date(r.end_time * 1000).toLocaleString('zh-CN') : '-';
+                const stepsHtml = (r.steps || []).map((s, i) => {
+                    if (s.type === 'loop_row') {
+                        return `<div style="padding:4px 8px;font-size:11px;border-bottom:1px solid var(--border)">
+                            <b>行 ${s.row_index || i+1}</b> — ${s.status || '?'} ${s.row_text ? '(' + escapeHtml(s.row_text.substring(0,60)) + ')' : ''}
+                        </div>`;
+                    }
+                    const act = s.action || s.type || '?';
+                    const ok = s.success !== false;
+                    return `<div style="padding:4px 8px;font-size:11px;border-bottom:1px solid var(--border);color:${ok?'var(--text)':'#f44336'}">
+                        ${i+1}. ${act} ${s.selector ? '<span style="color:var(--text-dim)">' + escapeHtml(s.selector.substring(0,50)) + '</span>' : ''}
+                        ${!ok && s.error ? ' — ' + escapeHtml(String(s.error).substring(0,80)) : ''}
+                    </div>`;
+                }).join('');
+                const extra = r.extra || {};
+                let extraHtml = '';
+                if (extra.processed != null) extraHtml += `<span>处理: ${extra.processed}</span>`;
+                if (extra.skipped != null) extraHtml += `<span>跳过: ${extra.skipped}</span>`;
+                if (extra.failed != null) extraHtml += `<span>失败: ${extra.failed}</span>`;
+                if (extra.ai_fix_count != null) extraHtml += `<span>AI修复: ${extra.ai_fix_count}</span>`;
+
+                const modal = document.createElement('div');
+                modal.className = 'modal-overlay';
+                modal.style.display = 'flex';
+                modal.innerHTML = `<div class="modal" style="max-width:550px;max-height:80vh;overflow-y:auto">
+                    <div class="modal-header">
+                        <h3>执行记录详情</h3>
+                        <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">&times;</button>
+                    </div>
+                    <div style="padding:16px;font-size:13px">
+                        <div style="margin-bottom:8px"><b>工作流:</b> ${escapeHtml(r.workflow_name || '-')}</div>
+                        <div style="margin-bottom:8px"><b>状态:</b> ${statusMap[r.status] || r.status}</div>
+                        <div style="margin-bottom:8px"><b>类型:</b> ${r.replay_type === 'loop' ? '循环回放' : '简单回放'}</div>
+                        <div style="margin-bottom:8px"><b>耗时:</b> ${dur}</div>
+                        <div style="margin-bottom:8px"><b>时间:</b> ${dt}</div>
+                        ${extraHtml ? '<div style="margin-bottom:8px;display:flex;gap:12px">' + extraHtml + '</div>' : ''}
+                        ${r.error ? '<div style="margin-bottom:8px;color:#f44336"><b>错误:</b> ' + escapeHtml(r.error) + '</div>' : ''}
+                        <div style="margin-top:12px;border:1px solid var(--border);border-radius:6px;overflow:hidden;max-height:300px;overflow-y:auto">
+                            <div style="padding:6px 8px;font-size:12px;font-weight:600;background:var(--surface2)">步骤详情 (${(r.steps||[]).length})</div>
+                            ${stepsHtml || '<div style="padding:8px;font-size:11px;color:var(--text-dim)">无步骤数据</div>'}
+                        </div>
+                    </div>
+                </div>`;
+                document.body.appendChild(modal);
+                modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+            } catch (e) {
+                showToast('加载记录详情失败', 'error');
+            }
+        }
+
+        async function deleteHistoryRecord(id) {
+            try {
+                const resp = await fetch(`/api/execution-history/${id}`, {method:'DELETE'});
+                const data = await resp.json();
+                if (data.success) { showToast('已删除'); loadExecutionHistory(); }
+                else showToast(data.error || '删除失败', 'error');
+            } catch (e) {
+                showToast('删除失败', 'error');
+            }
+        }
+
+        async function clearAllHistory() {
+            if (!confirm('确定清空所有执行历史记录？')) return;
+            const filter = document.getElementById('historyWorkflowFilter').value;
+            const qs = filter ? `?workflow_id=${encodeURIComponent(filter)}` : '';
+            try {
+                const resp = await fetch(`/api/execution-history${qs}`, {method:'DELETE'});
+                const data = await resp.json();
+                if (data.success) { showToast(`已清空 ${data.deleted} 条记录`); loadExecutionHistory(); }
+                else showToast(data.error || '清空失败', 'error');
+            } catch (e) {
+                showToast('清空失败', 'error');
+            }
+        }
+
+        // --- Schedule (定时执行) functions ---
+
+        async function openScheduleModal(workflowId, workflowName) {
+            const modal = document.createElement('div');
+            modal.className = 'modal-overlay';
+            modal.style.display = 'flex';
+            modal.innerHTML = `<div class="modal" style="max-width:480px">
+                <div class="modal-header">
+                    <h3>定时执行: ${escapeHtml(workflowName)}</h3>
+                    <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">&times;</button>
+                </div>
+                <div style="padding:16px">
+                    <div style="margin-bottom:12px">
+                        <label style="font-size:12px;color:var(--text-dim);display:block;margin-bottom:4px">触发类型</label>
+                        <select id="schedTriggerType" onchange="updateScheduleTriggerUI()" style="width:100%;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text)">
+                            <option value="interval">间隔执行</option>
+                            <option value="cron">定时执行 (Cron)</option>
+                        </select>
+                    </div>
+                    <div id="schedIntervalUI" style="margin-bottom:12px">
+                        <label style="font-size:12px;color:var(--text-dim);display:block;margin-bottom:4px">间隔 (分钟)</label>
+                        <input type="number" id="schedIntervalMinutes" value="30" min="1" style="width:100%;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text)">
+                    </div>
+                    <div id="schedCronUI" style="display:none;margin-bottom:12px">
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                            <div>
+                                <label style="font-size:12px;color:var(--text-dim);display:block;margin-bottom:4px">小时 (0-23)</label>
+                                <input type="number" id="schedCronHour" value="9" min="0" max="23" style="width:100%;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text)">
+                            </div>
+                            <div>
+                                <label style="font-size:12px;color:var(--text-dim);display:block;margin-bottom:4px">分钟 (0-59)</label>
+                                <input type="number" id="schedCronMinute" value="0" min="0" max="59" style="width:100%;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text)">
+                            </div>
+                        </div>
+                        <div style="margin-top:8px">
+                            <label style="font-size:12px;color:var(--text-dim);display:block;margin-bottom:4px">星期 (如: mon-fri, 留空为每天)</label>
+                            <input type="text" id="schedCronDow" placeholder="mon-fri" style="width:100%;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--text)">
+                        </div>
+                    </div>
+                    <button class="btn btn-primary" onclick="createSchedule('${workflowId}')" style="width:100%">创建定时任务</button>
+                </div>
+            </div>`;
+            document.body.appendChild(modal);
+            modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+        }
+
+        function updateScheduleTriggerUI() {
+            const type = document.getElementById('schedTriggerType').value;
+            document.getElementById('schedIntervalUI').style.display = type === 'interval' ? 'block' : 'none';
+            document.getElementById('schedCronUI').style.display = type === 'cron' ? 'block' : 'none';
+        }
+
+        async function createSchedule(workflowId) {
+            const type = document.getElementById('schedTriggerType').value;
+            let triggerArgs = {};
+            if (type === 'interval') {
+                triggerArgs = {minutes: parseInt(document.getElementById('schedIntervalMinutes').value) || 30};
+            } else {
+                triggerArgs = {
+                    hour: parseInt(document.getElementById('schedCronHour').value) || 0,
+                    minute: parseInt(document.getElementById('schedCronMinute').value) || 0,
+                };
+                const dow = document.getElementById('schedCronDow').value.trim();
+                if (dow) triggerArgs.day_of_week = dow;
+            }
+            try {
+                const resp = await fetch('/api/schedules', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({workflow_id: workflowId, trigger_type: type, trigger_args: triggerArgs}),
+                });
+                const data = await resp.json();
+                if (data.success) {
+                    showToast('定时任务已创建');
+                    document.querySelector('.modal-overlay:last-of-type')?.remove();
+                } else {
+                    showToast(data.error || '创建失败', 'error');
+                }
+            } catch (e) {
+                showToast('创建定时任务失败', 'error');
+            }
+        }
+
+        async function loadSchedules() {
+            try {
+                const resp = await fetch('/api/schedules');
+                const data = await resp.json();
+                if (!data.success) return;
+                return data.schedules || [];
+            } catch (e) { return []; }
+        }
+
+        async function deleteScheduleItem(id) {
+            try {
+                const resp = await fetch(`/api/schedules/${id}`, {method: 'DELETE'});
+                const data = await resp.json();
+                if (data.success) showToast('定时任务已删除');
+                else showToast(data.error || '删除失败', 'error');
+            } catch (e) { showToast('删除失败', 'error'); }
+        }
+
+        async function toggleScheduleItem(id, enabled) {
+            try {
+                const resp = await fetch(`/api/schedules/${id}/toggle`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({enabled}),
+                });
+                const data = await resp.json();
+                if (data.success) showToast(enabled ? '已启用' : '已禁用');
+                else showToast(data.error || '操作失败', 'error');
+            } catch (e) { showToast('操作失败', 'error'); }
+        }
+
+        // --- Workflow functions ---
+        let pendingReplayId = null;
+        let replayTotalSteps = 0;
+
+        function showSaveBar(count) {
+            const bar = document.getElementById('saveWfBar');
+            bar.querySelector('span').textContent = `任务含 ${count} 个可回放步骤，可保存为工作流`;
+            bar.classList.add('active');
+            document.getElementById('saveWfName').value = '';
+            document.getElementById('saveWfName').focus();
+        }
+
+        function hideSaveBar() {
+            document.getElementById('saveWfBar').classList.remove('active');
+        }
+
+        async function saveWorkflow() {
+            const name = document.getElementById('saveWfName').value.trim();
+            if (!name) {
+                document.getElementById('saveWfName').style.borderColor = 'var(--danger)';
+                return;
+            }
+            document.getElementById('saveWfName').style.borderColor = '';
+            const quickRun = document.getElementById('saveWfQuickRun').checked;
+            const payload = { name };
+            if (quickRun) {
+                payload.replay_config = { type: 'simple' };
+            }
+            try {
+                const res = await fetch('/api/workflows', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                const data = await res.json();
+                if (data.success) {
+                    hideSaveBar();
+                    appendLog({ type: 'done', summary: `工作流「${name}」已保存（${data.workflow.steps.length} 步）` });
+                    loadWorkflows();
+                } else {
+                    appendLog({ type: 'error', content: data.error || '保存失败' });
+                }
+            } catch (e) {
+                appendLog({ type: 'error', content: '保存工作流失败: ' + e.message });
+            }
+        }
+
+        async function loadWorkflows() {
+            try {
+                const res = await fetch('/api/workflows');
+                const data = await res.json();
+                allWorkflows = data.workflows || [];
+                filterWorkflows();
+            } catch (e) { /* ignore */ }
+        }
+
+        function renderWorkflowList(workflows) {
+            const list = document.getElementById('workflowList');
+            if (!workflows.length) {
+                list.innerHTML = '<div class="workflow-empty">暂无保存的工作流<br><span style="font-size:12px;margin-top:4px;display:block">执行 AI 任务后可保存为可重复执行的工作流</span></div>';
+                return;
+            }
+            list.innerHTML = workflows.map(wf => {
+                const date = new Date(wf.created_at * 1000).toLocaleDateString('zh-CN');
+                const rc = wf.replay_config;
+                const hasConfig = rc && rc.type;
+                let configTag = '';
+                if (hasConfig) {
+                    if (rc.type === 'loop') {
+                        const condText = rc.condition ? ' | 条件: ' + escHtml(rc.condition) : '';
+                        configTag = '<div style="font-size:11px;color:var(--primary);margin:4px 0;padding:3px 6px;background:rgba(99,102,241,0.08);border-radius:4px">⚡ 一键循环回放 | 行: <code>' + escHtml(rc.row_selector) + '</code>' + condText + '</div>';
+                    } else {
+                        configTag = '<div style="font-size:11px;color:var(--primary);margin:4px 0;padding:3px 6px;background:rgba(99,102,241,0.08);border-radius:4px">⚡ 一键回放已配置</div>';
+                    }
+                }
+                const isImported = (wf.task || '').includes('导入');
+                return `
+                <div class="workflow-card" data-id="${wf.id}">
+                    <div class="wf-name">
+                        <span style="display:flex;align-items:center">
+                            <input type="checkbox" class="wf-batch-check" data-wfid="${wf.id}" onclick="event.stopPropagation();updateBatchCount()" />
+                            ${escHtml(wf.name)}
+                        </span>
+                        <span style="font-size:11px;color:var(--text-dim);font-weight:400">
+                            ${isImported ? '<span style="color:var(--primary);background:rgba(99,102,241,0.08);padding:1px 5px;border-radius:3px;margin-right:4px">📥 导入</span>' : ''}
+                            已运行 ${wf.run_count} 次
+                        </span>
+                    </div>
+                    <div class="wf-meta">
+                        <span>${wf.steps_count} 步</span>
+                        <span>${date}</span>
+                        ${wf.task ? '<span style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escHtml(wf.task) + '</span>' : ''}
+                    </div>
+                    ${configTag}
+                    <div class="wf-actions">
+                        ${hasConfig ? '<button class="btn btn-primary" onclick="quickRunWorkflow(\'' + wf.id + '\',\'' + escHtml(wf.name) + '\')">⚡ 一键执行</button>' : ''}
+                        <button class="btn ${hasConfig ? 'btn-ghost' : 'btn-primary'}" onclick="startReplay('${wf.id}', ${wf.steps_count})">▶ 回放</button>
+                        <button class="btn btn-ghost" onclick="startLoopReplay('${wf.id}')">🔁 循环回放</button>
+                        <button class="btn btn-ghost" onclick="startReplayWithVars('${wf.id}')">📝 改参回放</button>
+                        <button class="btn btn-ghost" onclick="openScheduleModal('${wf.id}','${escHtml(wf.name)}')">⏰ 定时</button>
+                        <button class="btn btn-ghost" onclick="openVersionPanel('${wf.id}','${escHtml(wf.name)}')">📌 版本</button>
+                        <button class="btn btn-ghost" onclick="validateFixWorkflow('${wf.id}','${escHtml(wf.name)}')">🔧 AI 验证修复</button>
+                        <button class="btn btn-ghost" onclick="toggleStepsPanel('${wf.id}')">📋 步骤</button>
+                        <button class="btn btn-ghost" onclick="exportWorkflow('${wf.id}')">📤 导出</button>
+                        <button class="btn btn-ghost" onclick="cloneWorkflow('${wf.id}','${escHtml(wf.name)}')">📋 克隆</button>
+                        <button class="btn btn-danger" onclick="deleteWorkflow('${wf.id}','${escHtml(wf.name)}')">删除</button>
+                    </div>
+                    <div class="wf-steps-panel" id="stepsPanel_${wf.id}"></div>
+                </div>`;
+            }).join('');
+        }
+
+        async function startReplay(workflowId, stepsCount) {
+            const browserReady = await ensureBrowserRunning();
+            if (!browserReady) {
+                appendLog({ type: 'error', content: '浏览器未就绪，无法回放' });
+                return;
+            }
+            replayTotalSteps = stepsCount;
+            showReplayProgress();
+            switchTab('log');
+            appendLog({ type: 'message', content: '▶ 开始回放工作流...' });
+
+            try {
+                const res = await fetch(`/api/workflows/${workflowId}/replay`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({}),
+                });
+                const data = await res.json();
+                if (data.error) {
+                    appendLog({ type: 'error', content: data.error });
+                    hideReplayProgress();
+                }
+            } catch (e) {
+                appendLog({ type: 'error', content: '回放请求失败: ' + e.message });
+                hideReplayProgress();
+            }
+        }
+
+        async function quickRunWorkflow(workflowId, workflowName) {
+            const browserReady = await ensureBrowserRunning();
+            if (!browserReady) {
+                appendLog({ type: 'error', content: '浏览器未就绪，无法执行' });
+                return;
+            }
+            switchTab('log');
+            appendLog({ type: 'message', content: '⚡ 一键执行工作流「' + workflowName + '」...' });
+
+            try {
+                const res = await fetch('/api/workflows/' + workflowId + '/quick-run', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({}),
+                });
+                const data = await res.json();
+                if (data.error) {
+                    appendLog({ type: 'error', content: data.error });
+                } else {
+                    if (data.replay_type === 'loop') {
+                        appendLog({ type: 'message', content: '🔁 循环回放启动: ' + (data.row_selector || '') + (data.condition !== '（无条件）' ? ' | 条件: ' + data.condition : '') });
+                    } else {
+                        showReplayProgress();
+                    }
+                }
+            } catch (e) {
+                appendLog({ type: 'error', content: '一键执行失败: ' + e.message });
+            }
+        }
+
+        async function startReplayWithVars(workflowId) {
+            try {
+                const res = await fetch(`/api/workflows/${workflowId}`);
+                const data = await res.json();
+                if (!data.success) return;
+                const wf = data.workflow;
+                pendingReplayId = workflowId;
+                replayTotalSteps = wf.steps.length;
+                // 提取所有步骤中的可变文本参数
+                const form = document.getElementById('variablesForm');
+                form.innerHTML = '';
+                const seen = new Set();
+                wf.steps.forEach((step, i) => {
+                    Object.entries(step.params || {}).forEach(([key, val]) => {
+                        if (typeof val !== 'string') return;
+                        const uid = step.action + '.' + key;
+                        if (seen.has(uid)) return;
+                        seen.add(uid);
+                        const div = document.createElement('div');
+                        div.className = 'var-group';
+                        div.innerHTML = `
+                            <label>步骤 ${i+1} — ${step.action} → ${key}</label>
+                            <input type="text" data-action="${step.action}" data-key="${key}" value="${escHtml(val)}" placeholder="${escHtml(val)}">
+                        `;
+                        form.appendChild(div);
+                    });
+                });
+                document.getElementById('variablesModal').classList.add('active');
+            } catch (e) { /* ignore */ }
+        }
+
+        function closeVariablesModal() {
+            document.getElementById('variablesModal').classList.remove('active');
+            pendingReplayId = null;
+        }
+
+        async function confirmReplay() {
+            if (!pendingReplayId) return;
+            // 收集用户修改的变量
+            const inputs = document.querySelectorAll('#variablesForm input');
+            const variables = {};
+            inputs.forEach(input => {
+                const origVal = input.placeholder;
+                const newVal = input.value.trim();
+                if (newVal && newVal !== origVal) {
+                    variables[origVal] = newVal;
+                }
+            });
+            closeVariablesModal();
+
+            const browserReady = await ensureBrowserRunning();
+            if (!browserReady) {
+                appendLog({ type: 'error', content: '浏览器未就绪，无法回放' });
+                return;
+            }
+            showReplayProgress();
+            switchTab('log');
+            appendLog({ type: 'message', content: '▶ 开始回放工作流（自定义参数）...' });
+
+            try {
+                const res = await fetch(`/api/workflows/${pendingReplayId}/replay`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ variables }),
+                });
+                const data = await res.json();
+                if (data.error) {
+                    appendLog({ type: 'error', content: data.error });
+                    hideReplayProgress();
+                }
+            } catch (e) {
+                appendLog({ type: 'error', content: '回放请求失败: ' + e.message });
+                hideReplayProgress();
+            }
+        }
+
+        let pendingLoopReplayId = null;
+
+        function startLoopReplay(workflowId) {
+            pendingLoopReplayId = workflowId;
+            document.getElementById('loopRowSelector').value = '';
+            document.getElementById('loopCondition').value = '';
+            document.getElementById('loopMaxRows').value = '50';
+            document.getElementById('loopSaveConfig').checked = true;
+            // 尝试加载已有配置进行预填
+            fetch('/api/workflows/' + workflowId)
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success && data.workflow && data.workflow.replay_config) {
+                        const rc = data.workflow.replay_config;
+                        if (rc.type === 'loop') {
+                            document.getElementById('loopRowSelector').value = rc.row_selector || '';
+                            document.getElementById('loopCondition').value = rc.condition || '';
+                            document.getElementById('loopMaxRows').value = String(rc.max_rows || 50);
+                        }
+                    }
+                })
+                .catch(() => {});
+            document.getElementById('loopReplayModal').classList.add('active');
+        }
+
+        function closeLoopReplayModal() {
+            document.getElementById('loopReplayModal').classList.remove('active');
+            pendingLoopReplayId = null;
+        }
+
+        async function confirmLoopReplay() {
+            if (!pendingLoopReplayId) return;
+
+            const rowSelector = document.getElementById('loopRowSelector').value.trim();
+            if (!rowSelector) {
+                showToast('请输入行选择器', 'warning');
+                return;
+            }
+            const condition = document.getElementById('loopCondition').value.trim();
+            const maxRows = parseInt(document.getElementById('loopMaxRows').value) || 50;
+            const saveConfig = document.getElementById('loopSaveConfig').checked;
+            const workflowId = pendingLoopReplayId;
+            closeLoopReplayModal();
+
+            // 保存配置（如果勾选了）
+            if (saveConfig) {
+                try {
+                    await fetch('/api/workflows/' + workflowId + '/save-config', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            replay_config: {
+                                type: 'loop',
+                                row_selector: rowSelector,
+                                condition: condition,
+                                max_rows: maxRows,
+                            }
+                        }),
+                    });
+                    loadWorkflows();
+                } catch (e) { /* ignore save error */ }
+            }
+
+            const browserReady = await ensureBrowserRunning();
+            if (!browserReady) {
+                appendLog({ type: 'error', content: '浏览器未就绪，无法循环回放' });
+                return;
+            }
+
+            switchTab('log');
+            appendLog({ type: 'message', content: `🔁 开始循环回放: 行选择器="${rowSelector}", 条件="${condition || '无'}", 最多 ${maxRows} 行` });
+
+            try {
+                const res = await fetch(`/api/workflows/${workflowId}/loop-replay`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ row_selector: rowSelector, condition, max_rows: maxRows }),
+                });
+                const data = await res.json();
+                if (data.error) {
+                    appendLog({ type: 'error', content: data.error });
+                }
+            } catch (e) {
+                appendLog({ type: 'error', content: '循环回放请求失败: ' + e.message });
+            }
+        }
+
+        async function deleteWorkflow(id, name) {
+            if (!confirm(`确定删除工作流「${name}」？`)) return;
+            try {
+                await fetch(`/api/workflows/${id}`, { method: 'DELETE' });
+                loadWorkflows();
+            } catch (e) { /* ignore */ }
+        }
+
+        // --- Batch delete ---
+        let batchMode = false;
+
+        function toggleBatchMode() {
+            batchMode = !batchMode;
+            const list = document.getElementById('workflowList');
+            const btnMode = document.getElementById('btnBatchMode');
+            const btnDel = document.getElementById('btnBatchDelete');
+            const btnCancel = document.getElementById('btnBatchCancel');
+            if (batchMode) {
+                list.classList.add('batch-mode');
+                btnMode.style.display = 'none';
+                btnDel.style.display = '';
+                btnCancel.style.display = '';
+            } else {
+                list.classList.remove('batch-mode');
+                btnMode.style.display = '';
+                btnDel.style.display = 'none';
+                btnCancel.style.display = 'none';
+                list.querySelectorAll('.wf-batch-check').forEach(cb => cb.checked = false);
+            }
+            updateBatchCount();
+        }
+
+        function updateBatchCount() {
+            const checked = document.querySelectorAll('.wf-batch-check:checked');
+            document.getElementById('batchCount').textContent = checked.length;
+        }
+
+        async function batchDeleteWorkflows() {
+            const checked = document.querySelectorAll('.wf-batch-check:checked');
+            if (!checked.length) { showToast('请先勾选要删除的工作流', 'warning'); return; }
+            if (!confirm(`确定批量删除 ${checked.length} 个工作流？此操作不可恢复。`)) return;
+            const ids = Array.from(checked).map(cb => cb.dataset.wfid);
+            try {
+                const res = await fetch('/api/workflows/batch', {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ids }),
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast(data.message, 'success');
+                    batchMode = false;
+                    toggleBatchMode();
+                    loadWorkflows();
+                } else {
+                    showToast(data.error || '批量删除失败', 'error');
+                }
+            } catch (e) {
+                showToast('批量删除请求失败: ' + e.message, 'error');
+            }
+        }
+
+        // ---- 导入工作流 ----
+        let importSelectedFiles = []; // 存储选中的文件
+
+        function openImportModal() {
+            document.getElementById('importScriptContent').value = '';
+            document.getElementById('importFile').value = '';
+            document.getElementById('importFileName').innerHTML = '点击选择或拖拽文件到此处<br><span style="font-size:11px">支持 .py / .json / .txt / .js / .zip（可选多个文件）</span>';
+            document.getElementById('importFileList').style.display = 'none';
+            document.getElementById('importFileList').innerHTML = '';
+            document.getElementById('importName').value = '';
+            document.getElementById('importFormat').value = 'auto';
+            document.getElementById('importResult').style.display = 'none';
+            document.getElementById('importPreview').style.display = 'none';
+            document.getElementById('importPreviewBtn').style.display = 'none';
+            document.getElementById('importSubmitBtn').disabled = false;
+            document.getElementById('importSubmitBtn').textContent = '🚀 导入';
+            importSelectedFiles = [];
+            switchImportTab('paste');
+            document.getElementById('importModal').classList.add('active');
+            // 设置拖拽
+            setupDragDrop();
+        }
+
+        function closeImportModal() {
+            document.getElementById('importModal').classList.remove('active');
+        }
+
+        let importTabMode = 'paste';
+        function switchImportTab(mode) {
+            importTabMode = mode;
+            document.getElementById('importPasteArea').style.display = mode === 'paste' ? '' : 'none';
+            document.getElementById('importFileArea').style.display = mode === 'file' ? '' : 'none';
+            document.getElementById('importTabPaste').className = mode === 'paste' ? 'btn btn-primary' : 'btn btn-ghost';
+            document.getElementById('importTabFile').className = mode === 'file' ? 'btn btn-primary' : 'btn btn-ghost';
+            // 粘贴模式下显示预览按钮
+            document.getElementById('importPreviewBtn').style.display = mode === 'paste' ? '' : 'none';
+        }
+
+        function setupDragDrop() {
+            const dropZone = document.getElementById('importDropZone');
+            if (!dropZone) return;
+
+            dropZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                dropZone.style.borderColor = 'var(--accent)';
+                dropZone.style.background = 'rgba(108,92,231,0.05)';
+            });
+
+            dropZone.addEventListener('dragleave', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                dropZone.style.borderColor = 'var(--border)';
+                dropZone.style.background = '';
+            });
+
+            dropZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                dropZone.style.borderColor = 'var(--border)';
+                dropZone.style.background = '';
+
+                const files = Array.from(e.dataTransfer.files);
+                if (files.length > 0) {
+                    importSelectedFiles = files;
+                    updateFileListDisplay();
+                }
+            });
+        }
+
+        function handleImportFileSelect(input) {
+            const files = Array.from(input.files);
+            if (files.length > 0) {
+                importSelectedFiles = files;
+                updateFileListDisplay();
+            }
+        }
+
+        function updateFileListDisplay() {
+            const fileNameEl = document.getElementById('importFileName');
+            const fileListEl = document.getElementById('importFileList');
+            const nameInput = document.getElementById('importName');
+
+            if (importSelectedFiles.length === 1) {
+                const file = importSelectedFiles[0];
+                fileNameEl.textContent = file.name + ' (' + formatFileSize(file.size) + ')';
+                fileListEl.style.display = 'none';
+                if (!nameInput.value) {
+                    nameInput.value = file.name.replace(/\.[^.]+$/, '');
+                }
+            } else {
+                fileNameEl.textContent = importSelectedFiles.length + ' 个文件已选择';
+                fileListEl.style.display = 'block';
+                fileListEl.innerHTML = importSelectedFiles.map((f, i) =>
+                    '<div style="display:flex;justify-content:space-between;padding:3px 6px;border-bottom:1px solid var(--border);font-size:11px">' +
+                    '<span>' + escHtml(f.name) + '</span>' +
+                    '<span style="color:var(--text-dim)">' + formatFileSize(f.size) + '</span>' +
+                    '</div>'
+                ).join('');
+                if (!nameInput.value) {
+                    nameInput.value = '多文件导入';
+                }
+            }
+        }
+
+        function formatFileSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        }
+
+        function removeImportFile(index) {
+            importSelectedFiles.splice(index, 1);
+            updateFileListDisplay();
+        }
+
+        async function previewImport() {
+            const content = document.getElementById('importScriptContent').value.trim();
+            if (!content) {
+                showImportResult('error', '请先粘贴脚本内容');
+                return;
+            }
+            const format = document.getElementById('importFormat').value;
+            const previewEl = document.getElementById('importPreview');
+            const previewListEl = document.getElementById('importPreviewList');
+            const btn = document.getElementById('importPreviewBtn');
+
+            btn.disabled = true;
+            btn.textContent = '⏳ 解析中...';
+
+            try {
+                // 调用后端解析但不保存
+                const res = await fetch('/api/workflows/import-text', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ content, format, name: '__preview__' }),
+                });
+                const data = await res.json();
+
+                if (data.error) {
+                    showImportResult('error', data.error);
+                    previewEl.style.display = 'none';
+                } else {
+                    // 删除预览创建的工作流
+                    if (data.workflow && data.workflow.id) {
+                        fetch('/api/workflows/' + data.workflow.id, { method: 'DELETE' }).catch(() => {});
+                    }
+                    // 显示步骤预览 — 用 workflow detail 获取步骤
+                    const stepsCount = data.workflow.steps_count;
+                    const needsFix = data.workflow.needs_fix_count || 0;
+                    const aiUsed = data.workflow.ai_used;
+
+                    let previewHtml = '<div style="padding:4px;color:var(--text-dim);border-bottom:1px solid var(--border)">'
+                        + '检测格式: <b>' + (data.workflow.format_detected || 'auto') + '</b>'
+                        + ' | 步骤: <b>' + stepsCount + '</b>'
+                        + (needsFix > 0 ? ' | <span style="color:var(--warning)">需修复: ' + needsFix + '</span>' : '')
+                        + (aiUsed ? ' | <span style="color:var(--accent)">AI 参与</span>' : '')
+                        + '</div>';
+
+                    // 模拟步骤展示（从 warnings 推断）
+                    previewHtml += '<div style="padding:4px;color:var(--success)">✅ 解析成功，共 ' + stepsCount + ' 步，可直接点击「🚀 导入」确认。</div>';
+
+                    if (data.workflow.warnings && data.workflow.warnings.length) {
+                        previewHtml += '<div style="padding:4px;color:var(--warning)">' + data.workflow.warnings.join('<br>') + '</div>';
+                    }
+
+                    previewListEl.innerHTML = previewHtml;
+                    previewEl.style.display = 'block';
+                    document.getElementById('importResult').style.display = 'none';
+                }
+            } catch (e) {
+                showImportResult('error', '预览请求失败: ' + e.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '👁 预览';
+            }
+        }
+
+        async function submitImport() {
+            const format = document.getElementById('importFormat').value;
+            const name = document.getElementById('importName').value.trim();
+            const resultEl = document.getElementById('importResult');
+            const btn = document.getElementById('importSubmitBtn');
+
+            btn.disabled = true;
+            btn.textContent = '⏳ 解析中...';
+            resultEl.style.display = 'none';
+            document.getElementById('importPreview').style.display = 'none';
+
+            try {
+                let res;
+                if (importTabMode === 'paste') {
+                    const content = document.getElementById('importScriptContent').value.trim();
+                    if (!content) {
+                        showImportResult('error', '请粘贴脚本内容');
+                        btn.disabled = false;
+                        btn.textContent = '🚀 导入';
+                        return;
+                    }
+                    res = await fetch('/api/workflows/import-text', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ content, format, name }),
+                    });
+                } else {
+                    if (!importSelectedFiles.length) {
+                        showImportResult('error', '请选择文件');
+                        btn.disabled = false;
+                        btn.textContent = '🚀 导入';
+                        return;
+                    }
+                    const formData = new FormData();
+                    importSelectedFiles.forEach(f => formData.append('files[]', f));
+                    formData.append('format', format);
+                    formData.append('name', name);
+                    res = await fetch('/api/workflows/import-file', { method: 'POST', body: formData });
+                }
+
+                const data = await res.json();
+                if (data.error) {
+                    let msg = data.error;
+                    if (data.warnings && data.warnings.length) {
+                        msg += '<br><span style="color:var(--text-dim)">' + data.warnings.join('<br>') + '</span>';
+                    }
+                    showImportResult('error', msg);
+                } else {
+                    const wf = data.workflow;
+                    let msg = '✅ 导入成功！'
+                        + '<br>格式: <b>' + wf.format_detected + '</b>'
+                        + ' | 步骤: <b>' + wf.steps_count + '</b>'
+                        + (wf.ai_used ? ' | <span style="color:var(--accent)">AI 参与解析</span>' : ' | 本地解析');
+                    if (wf.files_parsed && wf.files_parsed.length > 1) {
+                        msg += '<br>解析文件: ' + wf.files_parsed.join(', ');
+                    }
+                    if (wf.needs_fix_count > 0) {
+                        msg += '<br><span style="color:var(--warning)">⚠ 有 ' + wf.needs_fix_count + ' 个步骤需要 AI 修复，请启动浏览器后点击「🔧 AI 验证修复」</span>';
+                    }
+                    if (wf.warnings && wf.warnings.length) {
+                        msg += '<br><span style="color:var(--text-dim)">' + wf.warnings.join('<br>') + '</span>';
+                    }
+                    showImportResult('success', msg);
+                    loadWorkflows();
+                    setTimeout(() => { closeImportModal(); switchTab('workflows'); }, 2000);
+                }
+            } catch (e) {
+                showImportResult('error', '导入请求失败: ' + e.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '🚀 导入';
+            }
+        }
+
+        function showImportResult(type, msg) {
+            const el = document.getElementById('importResult');
+            el.style.display = 'block';
+            el.style.background = type === 'error' ? 'rgba(239,68,68,0.08)' : 'rgba(34,197,94,0.08)';
+            el.style.color = type === 'error' ? 'var(--danger)' : 'var(--success)';
+            el.innerHTML = msg;
+        }
+
+        async function validateFixWorkflow(workflowId, workflowName) {
+            const browserReady = await ensureBrowserRunning();
+            if (!browserReady) {
+                appendLog({ type: 'error', content: '请先启动浏览器并导航到目标页面' });
+                return;
+            }
+            switchTab('log');
+            appendLog({ type: 'message', content: '🔧 开始验证+修复工作流「' + workflowName + '」...' });
+
+            try {
+                const res = await fetch('/api/workflows/' + workflowId + '/validate-fix', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({}),
+                });
+                const data = await res.json();
+                if (data.error) {
+                    appendLog({ type: 'error', content: data.error });
+                } else {
+                    appendLog({ type: 'message', content: '🔧 验证中... 共 ' + data.steps_count + ' 步' });
+                }
+            } catch (e) {
+                appendLog({ type: 'error', content: '验证请求失败: ' + e.message });
+            }
+        }
+
+        function showReplayProgress() {
+            const el = document.getElementById('replayProgress');
+            el.classList.add('active');
+            document.getElementById('replayFill').style.width = '0%';
+            document.getElementById('replayStep').textContent = '0/' + replayTotalSteps;
+            document.getElementById('replayLabel').textContent = '回放中...';
+        }
+
+        function hideReplayProgress() {
+            document.getElementById('replayProgress').classList.remove('active');
+        }
+
+        async function stopReplay() {
+            try {
+                const res = await fetch('/api/workflows/stop-replay', { method: 'POST' });
+                const data = await res.json();
+                if (data.success) {
+                    appendLog({ type: 'message', content: '⏹ 已请求停止回放...' });
+                }
+            } catch (e) {
+                appendLog({ type: 'error', content: '停止回放请求失败: ' + e.message });
+            }
+        }
+
+        function updateReplayProgress(stepData) {
+            const current = stepData.step || 0;
+            const total = stepData.total || replayTotalSteps || 1;
+            const pct = Math.round((current / total) * 100);
+            document.getElementById('replayFill').style.width = pct + '%';
+            document.getElementById('replayStep').textContent = current + '/' + total;
+            document.getElementById('replayLabel').textContent = `回放中 — ${stepData.action}`;
+        }
+
+        // --- Export workflow ---
+        function exportWorkflow(workflowId) {
+            window.open('/api/workflows/' + workflowId + '/export', '_blank');
+        }
+
+        // --- Step Viewer/Editor ---
+        async function toggleStepsPanel(workflowId) {
+            const panel = document.getElementById('stepsPanel_' + workflowId);
+            if (!panel) return;
+            if (panel.classList.contains('active')) {
+                panel.classList.remove('active');
+                return;
+            }
+            panel.innerHTML = '<div style="color:var(--text-dim);padding:6px;font-size:11px">加载中...</div>';
+            panel.classList.add('active');
+            try {
+                const res = await fetch('/api/workflows/' + workflowId);
+                const data = await res.json();
+                if (!data.success) { panel.innerHTML = '<div style="color:var(--danger);padding:6px;font-size:11px">加载失败</div>'; return; }
+                renderStepsPanel(panel, data.workflow);
+            } catch (e) {
+                panel.innerHTML = '<div style="color:var(--danger);padding:6px;font-size:11px">加载失败: ' + e.message + '</div>';
+            }
+        }
+
+        function renderStepsPanel(panel, wf) {
+            const steps = wf.steps || [];
+            if (!steps.length) {
+                panel.innerHTML = '<div style="color:var(--text-dim);padding:6px;font-size:11px">无步骤</div>';
+                return;
+            }
+            let html = '';
+            steps.forEach((step, i) => {
+                const paramsStr = step.params ? Object.entries(step.params).map(([k,v]) => k + '=' + (typeof v === 'string' ? v : JSON.stringify(v))).join(', ') : '';
+                html += '<div class="wf-step-item" onclick="toggleStepEdit(\'' + wf.id + '\',' + i + ')">'
+                    + '<span class="wf-step-num">' + (i + 1) + '</span>'
+                    + '<span class="wf-step-action">' + escHtml(step.action) + '</span>'
+                    + '<span class="wf-step-params" title="' + escHtml(paramsStr) + '">' + escHtml(paramsStr) + '</span>'
+                    + '</div>';
+                html += '<div class="wf-step-edit" id="stepEdit_' + wf.id + '_' + i + '">'
+                    + '<textarea id="stepEditTa_' + wf.id + '_' + i + '">' + escHtml(JSON.stringify(step, null, 2)) + '</textarea>'
+                    + '<div class="wf-step-edit-actions">'
+                    + '<button class="btn btn-ghost" onclick="event.stopPropagation();cancelStepEdit(\'' + wf.id + '\',' + i + ')" style="padding:2px 8px;font-size:11px">取消</button>'
+                    + '<button class="btn btn-primary" onclick="event.stopPropagation();saveStepEdit(\'' + wf.id + '\',' + i + ',' + steps.length + ')" style="padding:2px 8px;font-size:11px">保存</button>'
+                    + '<button class="btn btn-danger" onclick="event.stopPropagation();deleteStep(\'' + wf.id + '\',' + i + ',' + steps.length + ')" style="padding:2px 8px;font-size:11px">删除</button>'
+                    + '</div></div>';
+            });
+            panel.innerHTML = html;
+        }
+
+        function toggleStepEdit(workflowId, index) {
+            const el = document.getElementById('stepEdit_' + workflowId + '_' + index);
+            if (el) el.classList.toggle('active');
+        }
+
+        function cancelStepEdit(workflowId, index) {
+            const el = document.getElementById('stepEdit_' + workflowId + '_' + index);
+            if (el) el.classList.remove('active');
+        }
+
+        async function saveStepEdit(workflowId, index, totalSteps) {
+            const ta = document.getElementById('stepEditTa_' + workflowId + '_' + index);
+            if (!ta) return;
+            let newStep;
+            try {
+                newStep = JSON.parse(ta.value);
+            } catch (e) {
+                showToast('JSON 格式错误: ' + e.message, 'error');
+                return;
+            }
+            // 获取完整工作流并替换对应步骤
+            try {
+                const res = await fetch('/api/workflows/' + workflowId);
+                const data = await res.json();
+                if (!data.success) { showToast('获取工作流失败', 'error'); return; }
+                const steps = data.workflow.steps;
+                steps[index] = newStep;
+                const upRes = await fetch('/api/workflows/' + workflowId, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ steps }),
+                });
+                const upData = await upRes.json();
+                if (upData.success) {
+                    appendLog({ type: 'done', summary: '步骤 ' + (index + 1) + ' 已更新' });
+                    toggleStepsPanel(workflowId); // 关闭
+                    setTimeout(() => toggleStepsPanel(workflowId), 100); // 重新加载
+                } else {
+                    showToast(upData.error || '保存失败', 'error');
+                }
+            } catch (e) {
+                showToast('保存失败: ' + e.message, 'error');
+            }
+        }
+
+        async function deleteStep(workflowId, index, totalSteps) {
+            if (totalSteps <= 1) { showToast('至少保留一个步骤', 'warning'); return; }
+            if (!confirm('确定删除步骤 ' + (index + 1) + '？')) return;
+            try {
+                const res = await fetch('/api/workflows/' + workflowId);
+                const data = await res.json();
+                if (!data.success) return;
+                const steps = data.workflow.steps;
+                steps.splice(index, 1);
+                await fetch('/api/workflows/' + workflowId, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ steps }),
+                });
+                appendLog({ type: 'done', summary: '步骤 ' + (index + 1) + ' 已删除' });
+                toggleStepsPanel(workflowId);
+                setTimeout(() => toggleStepsPanel(workflowId), 100);
+                loadWorkflows();
+            } catch (e) {
+                showToast('删除失败: ' + e.message, 'error');
+            }
+        }
+
+        // --- Toast notification system ---
+        function showToast(message, type = 'info', duration = 3000) {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = 'toast toast-' + type;
+            toast.textContent = message;
+            container.appendChild(toast);
+            setTimeout(() => { toast.remove(); }, duration);
+        }
+
+        // --- Clone workflow ---
+        async function cloneWorkflow(id, name) {
+            try {
+                const res = await fetch('/api/workflows/' + id + '/clone', { method: 'POST' });
+                const data = await res.json();
+                if (data.success) {
+                    showToast('工作流「' + name + '」已克隆', 'success');
+                    loadWorkflows();
+                } else {
+                    showToast(data.error || '克隆失败', 'error');
+                }
+            } catch (e) {
+                showToast('克隆失败: ' + e.message, 'error');
+            }
+        }
+
+        // --- Log clear & export ---
+        function clearLogs() {
+            document.getElementById('logArea').innerHTML = '';
+            showToast('日志已清除', 'info');
+        }
+
+        function exportLogs() {
+            const area = document.getElementById('logArea');
+            const items = area.querySelectorAll('.log-item');
+            if (!items.length) {
+                showToast('没有日志可导出', 'warning');
+                return;
+            }
+            const lines = [];
+            const timestamp = new Date().toLocaleString('zh-CN');
+            lines.push('# AI Browser Controller 操作日志');
+            lines.push('# 导出时间: ' + timestamp);
+            lines.push('');
+            items.forEach((item, i) => {
+                lines.push('[' + (i + 1) + '] ' + item.textContent.trim());
+            });
+            const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'browser_log_' + new Date().toISOString().slice(0, 10) + '.txt';
+            a.click();
+            URL.revokeObjectURL(url);
+            showToast('日志已导出', 'success');
+        }
+
+        // --- Workflow search/filter ---
+        let allWorkflows = [];
+
+        function filterWorkflows() {
+            const query = (document.getElementById('workflowSearch').value || '').trim().toLowerCase();
+            if (!query) {
+                renderWorkflowList(allWorkflows);
+                return;
+            }
+            const filtered = allWorkflows.filter(wf =>
+                (wf.name || '').toLowerCase().includes(query)
+                || (wf.task || '').toLowerCase().includes(query)
+                || (wf.description || '').toLowerCase().includes(query)
+            );
+            renderWorkflowList(filtered);
+        }
+
+        // --- Keyboard shortcuts ---
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                const modals = ['settingsModal', 'variablesModal', 'loopReplayModal', 'importModal', 'versionModal'];
+                modals.forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el && el.classList.contains('active')) el.classList.remove('active');
+                });
+            }
+        });
+
+        // --- Webhook Management ---
+
+        async function loadWebhooks() {
+            try {
+                const res = await fetch('/api/webhooks');
+                const data = await res.json();
+                renderWebhookList(data);
+            } catch (e) {
+                console.error('加载 Webhook 失败:', e);
+            }
+        }
+
+        function renderWebhookList(webhooks) {
+            const list = document.getElementById('webhookList');
+            if (!webhooks.length) {
+                list.innerHTML = '<div class="workflow-empty">暂无 Webhook 配置<br><span style="font-size:12px;margin-top:4px;display:block">添加 Webhook 以在工作流完成时收到通知</span></div>';
+                return;
+            }
+            list.innerHTML = webhooks.map(wh => `
+                <div class="workflow-card" style="padding:10px">
+                    <div class="wf-name">
+                        <span>${escapeHtml(wh.name)}</span>
+                        <span style="font-size:11px;color:${wh.enabled ? 'var(--success)' : 'var(--text-dim)'};font-weight:400">${wh.enabled ? '✅ 启用' : '⏸ 禁用'}</span>
+                    </div>
+                    <div style="font-size:11px;color:var(--text-dim);margin:4px 0;word-break:break-all">${escapeHtml(wh.url)}</div>
+                    <div style="font-size:11px;color:var(--primary);margin-bottom:6px">${(wh.events || []).join(', ')}</div>
+                    <div style="display:flex;gap:6px">
+                        <button class="btn btn-ghost" onclick="toggleWebhook('${wh.id}',${!wh.enabled})" style="font-size:11px;padding:3px 8px">${wh.enabled ? '⏸ 禁用' : '✅ 启用'}</button>
+                        <button class="btn btn-danger" onclick="deleteWebhookItem('${wh.id}')" style="font-size:11px;padding:3px 8px">删除</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function openWebhookForm() {
+            document.getElementById('webhookForm').style.display = 'block';
+            document.getElementById('whName').value = '';
+            document.getElementById('whUrl').value = '';
+        }
+
+        async function saveWebhookForm() {
+            const name = document.getElementById('whName').value.trim();
+            const url = document.getElementById('whUrl').value.trim();
+            if (!name || !url) { showToast('请填写名称和 URL', 'error'); return; }
+            const events = Array.from(document.querySelectorAll('.wh-event:checked')).map(c => c.value);
+            try {
+                const res = await fetch('/api/webhooks', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ name, url, events }),
+                });
+                if (res.ok) {
+                    showToast('Webhook 已创建', 'success');
+                    document.getElementById('webhookForm').style.display = 'none';
+                    loadWebhooks();
+                } else {
+                    const d = await res.json();
+                    showToast(d.error || '创建失败', 'error');
+                }
+            } catch (e) { showToast('请求失败', 'error'); }
+        }
+
+        async function testWebhookUrl() {
+            const url = document.getElementById('whUrl').value.trim();
+            if (!url) { showToast('请先填写 URL', 'error'); return; }
+            try {
+                const res = await fetch('/api/webhooks/test', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ url }),
+                });
+                const d = await res.json();
+                showToast(d.success ? '测试成功 (HTTP ' + d.status + ')' : '测试失败: ' + d.error, d.success ? 'success' : 'error');
+            } catch (e) { showToast('请求失败', 'error'); }
+        }
+
+        async function toggleWebhook(id, enabled) {
+            await fetch('/api/webhooks/' + id, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ enabled }),
+            });
+            loadWebhooks();
+        }
+
+        async function deleteWebhookItem(id) {
+            if (!confirm('确认删除此 Webhook？')) return;
+            await fetch('/api/webhooks/' + id, { method: 'DELETE' });
+            showToast('Webhook 已删除', 'success');
+            loadWebhooks();
+        }
+
+        // --- Version Management ---
+
+        async function openVersionPanel(workflowId, workflowName) {
+            const res = await fetch('/api/workflows/' + workflowId + '/versions');
+            const versions = await res.json();
+            let html = '<div style="padding:10px"><h3 style="margin:0 0 8px 0;font-size:14px">📌 ' + escapeHtml(workflowName) + ' 版本历史</h3>';
+            html += '<div style="margin-bottom:8px"><button class="btn btn-primary" onclick="createNewVersion(\'' + workflowId + '\')" style="font-size:12px;padding:5px 12px">+ 创建版本</button></div>';
+            if (versions.length === 0) {
+                html += '<div style="color:var(--text-dim);font-size:12px;text-align:center;padding:16px">暂无版本记录<br>创建版本以便回滚</div>';
+            } else {
+                html += versions.map(v => {
+                    const d = new Date(v.created_at * 1000).toLocaleString('zh-CN');
+                    return '<div style="padding:8px;background:var(--surface);border-radius:6px;margin-bottom:6px;font-size:12px">' +
+                        '<div style="display:flex;justify-content:space-between;align-items:center">' +
+                        '<span style="font-weight:600">v' + v.version_num + '</span>' +
+                        '<span style="color:var(--text-dim)">' + d + '</span>' +
+                        '</div>' +
+                        '<div style="color:var(--text-dim);margin:3px 0">' + escapeHtml(v.message) + ' (' + v.step_count + ' 步)</div>' +
+                        '<button class="btn btn-ghost" onclick="restoreToVersion(\'' + workflowId + '\',\'' + v.version_id + '\')" style="font-size:11px;padding:2px 8px">↩ 回滚到此版本</button>' +
+                        '</div>';
+                }).join('');
+            }
+            html += '<button class="btn btn-ghost" onclick="this.closest(\'.modal-overlay\').classList.remove(\'active\')" style="margin-top:8px;font-size:12px">关闭</button></div>';
+            const overlay = document.getElementById('versionModal');
+            overlay.querySelector('.modal').innerHTML = html;
+            overlay.classList.add('active');
+        }
+
+        async function createNewVersion(workflowId) {
+            const message = prompt('版本说明 (可选):') || '';
+            try {
+                const res = await fetch('/api/workflows/' + workflowId + '/versions', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ message }),
+                });
+                if (res.ok) {
+                    showToast('版本已创建', 'success');
+                    openVersionPanel(workflowId, '');
+                } else {
+                    const d = await res.json();
+                    showToast(d.error || '创建失败', 'error');
+                }
+            } catch (e) { showToast('请求失败', 'error'); }
+        }
+
+        async function restoreToVersion(workflowId, versionId) {
+            if (!confirm('确认回滚到此版本？当前内容将自动备份。')) return;
+            try {
+                const res = await fetch('/api/workflows/' + workflowId + '/versions/' + versionId + '/restore', { method: 'POST' });
+                if (res.ok) {
+                    showToast('已回滚到指定版本', 'success');
+                    loadWorkflows();
+                    document.getElementById('versionModal').classList.remove('active');
+                } else {
+                    const d = await res.json();
+                    showToast(d.error || '回滚失败', 'error');
+                }
+            } catch (e) { showToast('请求失败', 'error'); }
+        }
+
+        // --- Browser Tab Management ---
+
+        async function loadBrowserTabs() {
+            try {
+                const res = await fetch('/api/tabs');
+                if (!res.ok) {
+                    document.getElementById('tabsList').innerHTML = '<div class="workflow-empty">启动浏览器后可管理标签页</div>';
+                    return;
+                }
+                const data = await res.json();
+                renderBrowserTabs(data);
+            } catch (e) {
+                document.getElementById('tabsList').innerHTML = '<div class="workflow-empty">无法获取标签页信息</div>';
+            }
+        }
+
+        function renderBrowserTabs(data) {
+            const list = document.getElementById('tabsList');
+            const tabs = data.tabs || [];
+            if (!tabs.length) {
+                list.innerHTML = '<div class="workflow-empty">无打开的标签页</div>';
+                return;
+            }
+            list.innerHTML = tabs.map(t => `
+                <div class="workflow-card" style="padding:8px;${t.active ? 'border-left:3px solid var(--accent)' : ''}">
+                    <div style="display:flex;justify-content:space-between;align-items:center">
+                        <span style="font-size:12px;font-weight:${t.active ? '600' : '400'}">${t.active ? '▶ ' : ''}#${t.index} ${escapeHtml(t.title || 'Untitled')}</span>
+                    </div>
+                    <div style="font-size:11px;color:var(--text-dim);margin:3px 0;word-break:break-all;max-height:30px;overflow:hidden">${escapeHtml(t.url)}</div>
+                    <div style="display:flex;gap:6px;margin-top:4px">
+                        ${!t.active ? '<button class="btn btn-ghost" onclick="switchBrowserTab(' + t.index + ')" style="font-size:11px;padding:2px 8px">切换到此</button>' : ''}
+                        <button class="btn btn-danger" onclick="closeBrowserTab(${t.index})" style="font-size:11px;padding:2px 8px">关闭</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function openNewTabForm() {
+            const form = document.getElementById('newTabForm');
+            form.style.display = form.style.display === 'none' ? 'block' : 'none';
+        }
+
+        async function createNewTab() {
+            const url = document.getElementById('newTabUrl').value.trim();
+            try {
+                const res = await fetch('/api/tabs', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ url }),
+                });
+                if (res.ok) {
+                    showToast('新标签页已打开', 'success');
+                    document.getElementById('newTabForm').style.display = 'none';
+                    document.getElementById('newTabUrl').value = '';
+                    loadBrowserTabs();
+                    refreshScreenshot();
+                } else {
+                    const d = await res.json();
+                    showToast(d.error || '打开失败', 'error');
+                }
+            } catch (e) { showToast('请求失败', 'error'); }
+        }
+
+        async function switchBrowserTab(index) {
+            try {
+                const res = await fetch('/api/tabs/switch', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ index }),
+                });
+                if (res.ok) {
+                    loadBrowserTabs();
+                    refreshScreenshot();
+                }
+            } catch (e) { showToast('切换失败', 'error'); }
+        }
+
+        async function closeBrowserTab(index) {
+            try {
+                const res = await fetch('/api/tabs/' + index, { method: 'DELETE' });
+                if (res.ok) {
+                    showToast('标签页已关闭', 'success');
+                    loadBrowserTabs();
+                    refreshScreenshot();
+                } else {
+                    const d = await res.json();
+                    showToast(d.error || '关闭失败', 'error');
+                }
+            } catch (e) { showToast('请求失败', 'error'); }
+        }
+
         // --- Init ---
         function checkAndSyncStatus() {
             fetch('/api/status').then(r => r.json()).then(s => {
                 updateBrowserStatus(s.browser_running);
                 if (s.browser_running) refreshScreenshot();
+                if (s.desktop_running) updateDesktopStatus(true);
             }).catch(() => {});
         }
 
         connectSSE();
         checkAndSyncStatus();
         loadLaunchHint();
+        loadWorkflows();
         document.addEventListener('visibilitychange', () => {
             if (!document.hidden) checkAndSyncStatus();
         });
