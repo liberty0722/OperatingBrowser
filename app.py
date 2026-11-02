@@ -9,12 +9,14 @@ import re
 import threading
 import time
 from typing import Optional
+from urllib.parse import quote
 
 from dotenv import load_dotenv
 from flask import Flask, Response, jsonify, render_template, request
 from flask_cors import CORS
 
 from ai_agent import AIAgent, MODE_BROWSER, MODE_DESKTOP
+from manual_recorder import manual_recorder
 from browser_engine import (
     BROWSER_MODE_BUILTIN,
     BROWSER_MODE_REUSE,
@@ -37,6 +39,8 @@ from workflow_manager import (
     fire_webhooks_async,
     get_execution_record,
     get_schedule,
+    get_schedule_next_run,
+    get_scheduler,
     get_sub_workflow_references,
     get_version,
     get_webhook,
@@ -55,7 +59,9 @@ from workflow_manager import (
     replay_with_sub_workflows,
     replay_workflow,
     restore_version,
+    run_schedule_now,
     safe_decode,
+    set_engine_running_reporter,
     save_schedule,
     save_webhook,
     save_workflow,
@@ -78,6 +84,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
+app.jinja_env.auto_reload = True
+app.config["TEMPLATES_AUTO_RELOAD"] = True
 CORS(app)
 
 # ------------------------------------------------------------------
@@ -173,81 +181,135 @@ def api_status():
     })
 
 
+_browser_start_lock = threading.Lock()
+
+
+def _start_browser(browser_mode: Optional[str] = None) -> tuple[bool, str, str]:
+    """启动浏览器（专属线程运行 Playwright）。返回 (成功, 消息, 模式)。
+
+    供 /api/browser/start 和定时任务自动拉起共用；加锁防止并发重复启动。
+    """
+    global browser_engine, browser_thread
+    with _browser_start_lock:
+        config = get_config()
+        browser_mode = browser_mode or config["browser_mode"]
+        if browser_engine and browser_engine.is_connected:
+            return True, "浏览器已在运行", browser_mode
+
+        ready_event = threading.Event()
+        error_holder = [None]
+
+        def browser_worker():
+            """浏览器专属线程：启动浏览器 → 循环处理调用请求。"""
+            global browser_engine
+            try:
+                engine = BrowserEngine(
+                    headless=config["headless"],
+                    browser_type=config["browser_type"],
+                    browser_mode=browser_mode,
+                    cdp_url=config["cdp_url"],
+                    viewport_width=config["viewport_width"],
+                    viewport_height=config["viewport_height"],
+                )
+                engine.start()
+                browser_engine = engine
+                ready_event.set()
+
+                # 持续处理来自其他线程的 Playwright 调用
+                while browser_engine is not None and browser_engine.is_connected:
+                    browser_engine.process_pending_calls(timeout=0.05)
+            except Exception as exc:
+                error_holder[0] = str(exc)
+                ready_event.set()
+
+        browser_thread = threading.Thread(target=browser_worker, daemon=True)
+        browser_thread.start()
+        # reuse 模式可能需要关闭 Chrome + 等待端口释放 + 重启 + 等待 CDP，给更长超时
+        wait_timeout = 90 if browser_mode == BROWSER_MODE_REUSE else 30
+        ready_event.wait(timeout=wait_timeout)
+
+        if error_holder[0]:
+            broadcast_event("browser", {"status": "error", "message": error_holder[0]})
+            return False, error_holder[0], browser_mode
+
+        if browser_engine is None or not browser_engine.is_connected:
+            msg = "浏览器启动超时，请检查 Chrome 是否正常运行后重试。"
+            broadcast_event("browser", {"status": "error", "message": msg})
+            return False, msg, browser_mode
+
+        broadcast_event("browser", {"status": "started", "mode": browser_mode})
+        return True, "浏览器已启动", browser_mode
+
+
 @app.route("/api/browser/start", methods=["POST"])
 def api_browser_start():
     """启动浏览器（在专属线程中运行，解决 Playwright 线程安全问题）。"""
-    global browser_engine, browser_thread
     if browser_engine and browser_engine.is_connected:
         return jsonify({"success": True, "message": "浏览器已在运行"})
 
     # 前端可通过 POST body 覆盖默认 mode
     data = request.get_json(silent=True) or {}
-    config = get_config()
-    browser_mode = data.get("browser_mode", config["browser_mode"])
-
-    ready_event = threading.Event()
-    error_holder = [None]
-
-    def browser_worker():
-        """浏览器专属线程：启动浏览器 → 循环处理调用请求。"""
-        global browser_engine
-        try:
-            engine = BrowserEngine(
-                headless=config["headless"],
-                browser_type=config["browser_type"],
-                browser_mode=browser_mode,
-                cdp_url=config["cdp_url"],
-                viewport_width=config["viewport_width"],
-                viewport_height=config["viewport_height"],
-            )
-            engine.start()
-            browser_engine = engine
-            ready_event.set()
-
-            # 持续处理来自其他线程的 Playwright 调用
-            while browser_engine is not None and browser_engine.is_connected:
-                browser_engine.process_pending_calls(timeout=0.05)
-            # stop_requested 信号触发了 stop()，或 browser_engine 被置空
-            # 无论哪种情况，线程均正常退出
-        except Exception as exc:
-            error_holder[0] = str(exc)
-            ready_event.set()
-
-    browser_thread = threading.Thread(target=browser_worker, daemon=True)
-    browser_thread.start()
-    # reuse 模式可能需要关闭 Chrome + 等待端口释放 + 重启 + 等待 CDP，给更长超时
-    wait_timeout = 90 if browser_mode == BROWSER_MODE_REUSE else 30
-    ready_event.wait(timeout=wait_timeout)
-
-    if error_holder[0]:
-        broadcast_event("browser", {"status": "error", "message": error_holder[0]})
-        return jsonify({"error": error_holder[0]}), 500
-
-    # 检查是否真的启动成功（防止 ready_event 超时但无错误的情况）
-    if browser_engine is None or not browser_engine.is_connected:
-        msg = "浏览器启动超时，请检查 Chrome 是否正常运行后重试。"
-        broadcast_event("browser", {"status": "error", "message": msg})
+    ok, msg, mode = _start_browser(data.get("browser_mode"))
+    if not ok:
         return jsonify({"error": msg}), 500
+    return jsonify({"success": True, "message": msg, "mode": mode})
 
-    broadcast_event("browser", {"status": "started", "mode": browser_mode})
-    # 设置定时任务的全局浏览器引擎上下文
-    set_scheduled_replay_context(browser_engine, broadcast_event)
-    return jsonify({"success": True, "message": "浏览器已启动", "mode": browser_mode})
+
+def _engine_for_schedule(auto_start: bool = True):
+    """定时任务获取可用浏览器引擎：未连接时按需自动启动；有其他回放在跑时拒绝。"""
+    if workflow_replay_status.get("running") or loop_replay_status.get("running"):
+        raise RuntimeError("当前有其他工作流正在回放，本次定时触发已跳过")
+    if current_task_status.get("running"):
+        raise RuntimeError("当前有 AI 任务正在执行，本次定时触发已跳过")
+    if browser_engine and browser_engine.is_connected:
+        return browser_engine
+    if not auto_start:
+        raise RuntimeError("浏览器未启动（该定时任务未开启自动启动浏览器）")
+    broadcast_event("schedule_info", {"message": "⏰ 定时任务触发，浏览器未启动，正在自动启动…"})
+    ok, msg, _ = _start_browser()
+    if not ok:
+        raise RuntimeError("自动启动浏览器失败: " + msg)
+    return browser_engine
+
+
+def _schedule_browser_stopper():
+    """定时任务执行完后的浏览器关闭回调（无人值守：跑完即关）。"""
+    broadcast_event("schedule_info", {"message": "⏰ 定时任务执行完毕，正在自动关闭浏览器…"})
+    try:
+        _stop_browser()
+        logger.info("定时任务：浏览器已自动关闭")
+    except Exception as exc:
+        logger.error("定时任务关闭浏览器失败: %s", exc)
+
+
+def _stop_browser():
+    """停止浏览器（供 /api/browser/stop 和定时任务自动关闭共用）。"""
+    global browser_engine, browser_thread
+    if browser_engine:
+        engine = browser_engine
+        # 先发停止信号：worker 线程在 process_pending_calls 中执行 stop()，
+        # 包括结束自启的调试 Chrome 进程并释放端口。
+        # 注意：不能先置空 browser_engine，否则 worker 循环条件
+        # (browser_engine is not None) 会先退出，stop() 永远不会执行。
+        engine.request_stop()
+        # 等待 worker 线程完成清理（杀进程/释放端口需要数秒）
+        if browser_thread and browser_thread.is_alive():
+            browser_thread.join(timeout=30)
+        else:
+            # worker 已不在（如浏览器假死），在本线程兜底执行清理
+            try:
+                engine.stop()
+            except Exception:
+                pass
+        browser_engine = None  # 循环退出后置空，worker 线程随之结束
+        browser_thread = None
+    broadcast_event("browser", {"status": "stopped"})
 
 
 @app.route("/api/browser/stop", methods=["POST"])
 def api_browser_stop():
     """停止浏览器。"""
-    global browser_engine, browser_thread
-    if browser_engine:
-        engine = browser_engine
-        browser_engine = None  # 先置空，让 worker 线程在 stop 完成后退出循环
-        engine.request_stop()  # 线程安全：由 owner 线程在 process_pending_calls 中执行 stop()
-        # 等待 worker 线程退出（给予足够时间完成清理）
-        if browser_thread and browser_thread.is_alive():
-            browser_thread.join(timeout=5)
-        browser_thread = None
-    broadcast_event("browser", {"status": "stopped"})
+    _stop_browser()
     return jsonify({"success": True, "message": "浏览器已关闭"})
 
 
@@ -437,6 +499,117 @@ def api_update_config():
 
 
 # ------------------------------------------------------------------
+# 路由 - 手动录制（用户真实操作 → 工作流）
+# ------------------------------------------------------------------
+
+@app.route("/api/record/start", methods=["POST"])
+def api_record_start():
+    """开始手动录制。body: {mode: 'browser'|'desktop'}"""
+    data = request.get_json(silent=True) or {}
+    mode = data.get("mode", MODE_BROWSER)
+
+    if manual_recorder.recording:
+        return jsonify({"error": "已有录制会话在进行中"}), 400
+
+    def on_event(ev: dict) -> None:
+        """录制事件 → SSE 推送到前端日志区。"""
+        label = {
+            "click": "🖱 点击",
+            "input": "⌨ 输入",
+            "select": "☑ 选择",
+            "keydown": "⌨ 按键",
+            "navigate": "🔗 导航",
+            "mouse_click": "🖱 鼠标点击",
+            "mouse_scroll": "🖱 滚轮",
+            "keyboard_type": "⌨ 输入文本",
+            "key": "⌨ 按键",
+            "modkey": "⌨ 组合键",
+        }.get(ev.get("type"), ev.get("type"))
+        detail = ""
+        if ev.get("selector"):
+            detail = ev["selector"]
+        elif ev.get("text"):
+            detail = ev["text"]
+        elif ev.get("url"):
+            detail = ev["url"]
+        elif ev.get("key"):
+            detail = ev["key"]
+        elif "x" in ev and "y" in ev:
+            detail = f"({ev['x']}, {ev['y']})"
+        broadcast_event("record_event", {
+            "type": "message",
+            "content": f"🔴 录制中 {label} {detail}".rstrip(),
+        })
+
+    if mode == MODE_DESKTOP:
+        result = manual_recorder.start_desktop_recording(desktop_engine=desktop_engine, on_event=on_event)
+    else:
+        if not browser_engine or not browser_engine.is_connected:
+            return jsonify({"error": "请先启动浏览器"}), 400
+        result = manual_recorder.start_browser_recording(browser_engine=browser_engine, on_event=on_event)
+
+    if result.get("error"):
+        return jsonify(result), 400
+    broadcast_event("record_event", {"type": "message", "content": f"🔴 {result.get('message', '录制已开始')}"})
+    return jsonify(result)
+
+
+@app.route("/api/record/stop", methods=["POST"])
+def api_record_stop():
+    """停止录制。body: {save_name?: string, quick_run?: bool}"""
+    data = request.get_json(silent=True) or {}
+    result = manual_recorder.stop()
+    if result.get("error"):
+        return jsonify(result), 400
+
+    steps = result.get("steps", [])
+    broadcast_event("record_event", {
+        "type": "message",
+        "content": f"⏹ 录制结束：捕获 {result.get('events_count', 0)} 个事件，转换为 {len(steps)} 个可回放步骤",
+    })
+
+    save_name = (data.get("save_name") or "").strip()
+    if save_name:
+        if not steps:
+            return jsonify({"error": "没有录制到可回放的操作步骤"}), 400
+        wf = save_workflow(
+            name=save_name,
+            task=f"[手动录制] {save_name}",
+            steps=steps,
+            description="通过手动录制模式生成",
+            replay_config={"type": "simple"} if data.get("quick_run") else None,
+            mode=result.get("mode", MODE_BROWSER),
+        )
+        return jsonify({"success": True, "message": "录制已保存为工作流", "workflow": wf})
+
+    # 未指定名称：返回步骤，由前端弹保存条
+    return jsonify({
+        "success": True,
+        "message": "录制已停止",
+        "mode": result.get("mode"),
+        "steps": steps,
+        "steps_count": len(steps),
+    })
+
+
+@app.route("/api/record/pause", methods=["POST"])
+def api_record_pause():
+    """暂停/继续录制。"""
+    result = manual_recorder.pause()
+    if result.get("error"):
+        return jsonify(result), 400
+    state = "已暂停" if result.get("paused") else "已继续"
+    broadcast_event("record_event", {"type": "message", "content": f"⏸ 录制{state}"})
+    return jsonify(result)
+
+
+@app.route("/api/record/status", methods=["GET"])
+def api_record_status():
+    """查询录制状态。"""
+    return jsonify({"success": True, **manual_recorder.get_status()})
+
+
+# ------------------------------------------------------------------
 # 路由 - 工作流（录制与回放）
 # ------------------------------------------------------------------
 
@@ -558,14 +731,30 @@ def api_export_workflow(workflow_id: str):
         "replay_config": wf.get("replay_config"),
         "exported_at": time.time(),
     }
+
+    # 附带该工作流的定时任务配置（剥离运行状态，导入后可直接重建）
+    wf_schedules = [s for s in list_schedules() if s.get("workflow_id") == workflow_id]
+    if wf_schedules:
+        export_data["schedules"] = [
+            {
+                "trigger_type": s.get("trigger_type"),
+                "trigger_args": s.get("trigger_args", {}),
+                "variables": s.get("variables", {}),
+                "enabled": s.get("enabled", True),
+                "auto_start_browser": s.get("auto_start_browser", True),
+                "auto_close_browser": s.get("auto_close_browser", False),
+            }
+            for s in wf_schedules
+        ]
     json_bytes = json.dumps(export_data, ensure_ascii=False, indent=2).encode("utf-8")
     safe_name = re.sub(r'[^\w\u4e00-\u9fff\-]', '_', wf["name"])[:50] or "workflow"
+    encoded_name = quote(safe_name)
 
     return Response(
         json_bytes,
         mimetype="application/json",
         headers={
-            "Content-Disposition": "attachment; filename*=UTF-8''{}.json".format(safe_name),
+            "Content-Disposition": "attachment; filename*=UTF-8''{}.json".format(encoded_name),
         },
     )
 
@@ -710,7 +899,13 @@ def api_loop_replay_workflow(workflow_id: str):
                 ai_config=ai_config,
                 stop_event=loop_replay_stop_event,
             )
-            broadcast_event("loop_replay_complete", result)
+            if result.get("success"):
+                broadcast_event("loop_replay_complete", result)
+            else:
+                broadcast_event("loop_replay_error", {
+                    "error": result.get("error") or "循环回放失败（未知原因）",
+                    "steps": result.get("steps", []),
+                })
             event_name = "replay_success" if result.get("success") else "replay_failed"
             fire_webhooks_async(event_name, {
                 "workflow_id": workflow_id,
@@ -809,7 +1004,13 @@ def api_quick_run_workflow(workflow_id: str):
                     ai_config=ai_config,
                     stop_event=loop_replay_stop_event,
                 )
-                broadcast_event("loop_replay_complete", result)
+                if result.get("success"):
+                    broadcast_event("loop_replay_complete", result)
+                else:
+                    broadcast_event("loop_replay_error", {
+                        "error": result.get("error") or "循环回放失败（未知原因）",
+                        "steps": result.get("steps", []),
+                    })
             except Exception as exc:
                 broadcast_event("loop_replay_error", {"error": str(exc)})
             finally:
@@ -849,7 +1050,14 @@ def api_quick_run_workflow(workflow_id: str):
                 ai_config=ai_config,
                 stop_event=workflow_replay_stop_event,
             )
-            broadcast_event("replay_complete", result)
+            if result.get("success"):
+                broadcast_event("replay_complete", result)
+            else:
+                broadcast_event("replay_error", {
+                    "error": result.get("error") or "回放失败（未知原因）",
+                    "steps": result.get("steps", []),
+                    "stopped_at": result.get("stopped_at"),
+                })
         except Exception as exc:
             broadcast_event("replay_error", {"error": str(exc)})
         finally:
@@ -935,6 +1143,9 @@ def api_import_text():
         replay_config={"type": "simple"},
     )
 
+    # 若导出内容带有定时任务配置，自动为导入的工作流重建
+    imported_schedules = _restore_schedules_for_workflow(wf, content)
+
     # 统计 needs_fix 数量
     needs_fix_count = sum(1 for s in steps if s.get("needs_fix"))
 
@@ -944,10 +1155,11 @@ def api_import_text():
             "id": wf["id"],
             "name": wf["name"],
             "steps_count": len(steps),
-            "format_detected": result.get("format_detected"),
+            "format_detected": result["format_detected"],
             "ai_used": result.get("ai_used", False),
             "needs_fix_count": needs_fix_count,
             "warnings": result.get("warnings", []),
+            "schedules_restored": imported_schedules,
         },
     })
 
@@ -1098,6 +1310,9 @@ def api_import_file():
         replay_config={"type": "simple"},
     )
 
+    # 若导出文件带有定时任务配置，自动为导入的工作流重建
+    imported_schedules = _restore_schedules_for_workflow(wf, content)
+
     needs_fix_count = sum(1 for s in steps if s.get("needs_fix"))
 
     return jsonify({
@@ -1106,12 +1321,43 @@ def api_import_file():
             "id": wf["id"],
             "name": wf["name"],
             "steps_count": len(steps),
-            "format_detected": result.get("format_detected"),
+            "format_detected": result["format_detected"],
             "ai_used": result.get("ai_used", False),
             "needs_fix_count": needs_fix_count,
             "warnings": result.get("warnings", []),
+            "schedules_restored": imported_schedules,
         },
     })
+
+
+def _restore_schedules_for_workflow(wf: dict, content: str) -> int:
+    """从导出的 JSON 内容中解析 schedules 字段并重建定时任务，返回重建数量。"""
+    try:
+        data = json.loads(content)
+    except (json.JSONDecodeError, ValueError):
+        return 0
+    schedules = data.get("schedules")
+    if not isinstance(schedules, list):
+        return 0
+    count = 0
+    for s in schedules:
+        if not isinstance(s, dict) or not s.get("trigger_type") or not s.get("trigger_args"):
+            continue
+        try:
+            res = save_schedule(
+                workflow_id=wf["id"],
+                trigger_type=s["trigger_type"],
+                trigger_args=s.get("trigger_args", {}),
+                variables=s.get("variables", {}),
+                enabled=bool(s.get("enabled", True)),
+                auto_start_browser=bool(s.get("auto_start_browser", True)),
+                auto_close_browser=bool(s.get("auto_close_browser", False)),
+            )
+            if res.get("success"):
+                count += 1
+        except Exception as exc:
+            logger.warning("导入定时任务失败: %s", exc)
+    return count
 
 
 @app.route("/api/workflows/<workflow_id>/validate-fix", methods=["POST"])
@@ -1375,6 +1621,8 @@ def api_replay_with_conditions():
 def api_list_schedules():
     """列出所有定时任务。"""
     schedules = list_schedules()
+    for s in schedules:
+        s["next_run"] = get_schedule_next_run(s["id"]) if s.get("enabled") else None
     return jsonify({"success": True, "schedules": schedules})
 
 
@@ -1387,6 +1635,8 @@ def api_create_schedule():
     trigger_args = body.get("trigger_args", {})
     variables = body.get("variables", {})
     enabled = body.get("enabled", True)
+    auto_start_browser = bool(body.get("auto_start_browser", True))
+    auto_close_browser = bool(body.get("auto_close_browser", False))
 
     if not workflow_id:
         return jsonify({"success": False, "error": "缺少 workflow_id"}), 400
@@ -1407,6 +1657,8 @@ def api_create_schedule():
         variables=variables,
         ai_config=ai_config,
         enabled=enabled,
+        auto_start_browser=auto_start_browser,
+        auto_close_browser=auto_close_browser,
     )
     return jsonify(result)
 
@@ -1445,6 +1697,15 @@ def api_toggle_schedule(schedule_id: str):
     body = request.get_json(silent=True) or {}
     enabled = body.get("enabled", True)
     result = toggle_schedule(schedule_id, enabled)
+    if not result.get("success"):
+        return jsonify(result), 404
+    return jsonify(result)
+
+
+@app.route("/api/schedules/<schedule_id>/run", methods=["POST"])
+def api_run_schedule_now(schedule_id: str):
+    """立即在后台执行一次定时任务（走与定时触发完全相同的流程）。"""
+    result = run_schedule_now(schedule_id)
     if not result.get("success"):
         return jsonify(result), 404
     return jsonify(result)
@@ -1860,5 +2121,15 @@ if __name__ == "__main__":
     host = os.getenv("HOST", "0.0.0.0")
     port = int(os.getenv("PORT", "5000"))
     debug = os.getenv("DEBUG", "false").lower() == "true"
+    # 定时任务：注入引擎提供者（触发时按需自动启动浏览器），并立即初始化调度器恢复已有任务
+    # debug 热重载下只在实际服务子进程中初始化，避免重复调度
+    if not debug or os.environ.get("WERKZEUG_RUN_MAIN") == "true":
+        set_scheduled_replay_context(None, broadcast_event, engine_provider=_engine_for_schedule, stop_browser_provider=_schedule_browser_stopper)
+        set_engine_running_reporter(lambda: bool(browser_engine and browser_engine.is_connected))
+        try:
+            get_scheduler()
+            logger.info("定时调度器已启动，已恢复 %d 个定时任务", sum(1 for s in list_schedules() if s.get("enabled")))
+        except Exception as exc:
+            logger.error("定时调度器启动失败: %s", exc)
     logger.info("启动服务: http://%s:%d", host, port)
     app.run(host=host, port=port, debug=debug, threaded=True)

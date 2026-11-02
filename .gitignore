@@ -3,5 +3,9 @@ __pycache__/
 *.pyc
 screenshots/
 workflows/
+execution_history/
+schedules/
+server_err.log
+server_out.log
 3.10
 .codebuddy/

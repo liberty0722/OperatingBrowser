@@ -202,6 +202,50 @@ class BrowserEngine:
         except Exception as exc:
             logger.warning("清理旧调试端口进程时出错: %s", exc)
 
+    def _kill_orphan_debug_chrome(self) -> None:
+        """清理残留的调试专用 Chrome 孤儿进程。
+
+        服务重启后会丢失对 Chrome 进程的引用，此时由本服务启动的
+        调试 Chrome（user-data-dir 含 "-Debug" 或独立调试目录）会变成
+        孤儿进程并持续占用调试端口，导致下次启动失败。
+
+        判定规则（在 PowerShell 中一次性完成）：
+        - 命令行带 remote-debugging-port 且 user-data-dir 是调试专用目录
+        - 父进程不是 chrome（说明是主进程而非渲染子进程）
+        - 父进程 PID 在当前系统中已不存在（说明启动它的服务已退出）
+        满足以上条件即为孤儿根进程，树形终止（连带所有子进程）。
+        不影响用户的普通 Chrome（不带 remote-debugging-port）。
+        """
+        ps_script = r"""
+        $procs = Get-CimInstance Win32_Process -Filter "Name='chrome.exe'"
+        $allIds = @(Get-Process).Id
+        $killed = 0
+        foreach ($d in $procs) {
+            $cmd = $d.CommandLine
+            if (-not $cmd) { continue }
+            if ($cmd -notlike '*remote-debugging-port*') { continue }
+            if ($cmd -notlike '*User Data-Debug*' -and $cmd -notlike '*ai_browser_debug_profile*') { continue }
+            $pp = [int]$d.ParentProcessId
+            $parentIsChrome = $null -ne ($procs | Where-Object { $_.ProcessId -eq $pp })
+            $parentExists = ($allIds -contains $pp)
+            if (-not $parentIsChrome -and -not $parentExists) {
+                taskkill /F /T /PID $d.ProcessId 2>$null | Out-Null
+                $killed++
+            }
+        }
+        Write-Output $killed
+        """
+        try:
+            result = subprocess.run(
+                ["powershell", "-NoProfile", "-Command", ps_script],
+                capture_output=True, text=True, timeout=30,
+            )
+            killed = result.stdout.strip()
+            if killed and killed.isdigit() and int(killed) > 0:
+                logger.info("stop(): 已清理 %s 个孤儿调试 Chrome 进程", killed)
+        except Exception as exc:
+            logger.warning("清理孤儿调试 Chrome 进程时出错: %s", exc)
+
     @staticmethod
     def _is_port_listening(port: int) -> bool:
         """检测指定端口是否有进程在监听（TCP socket 级检测）。"""
@@ -665,10 +709,24 @@ class BrowserEngine:
         # reuse/standalone 模式启动的 Chrome 进程需要关闭
         if self._chrome_process:
             try:
-                self._chrome_process.terminate()
+                # 树形终止：连同所有渲染子进程一起结束，避免残留
+                subprocess.run(
+                    ["taskkill", "/F", "/T", "/PID", str(self._chrome_process.pid)],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=10,
+                )
             except Exception:
                 pass
             self._chrome_process = None
+
+        # 清理可能残留的调试专用 Chrome 孤儿进程（如服务重启后引用丢失），
+        # 避免其一直占用调试端口导致下次启动失败
+        if is_cdp:
+            self._kill_orphan_debug_chrome()
+
+        # 清除停止信号（stop 可能由兜底路径直接调用，复用对象时不残留状态）
+        self._stop_requested.clear()
 
         self._page = None
         self._pages = []
@@ -706,19 +764,22 @@ class BrowserEngine:
         """
         self._stop_requested.set()
 
-    def _cross_thread_call(self, func, *args, **kwargs):
-        """如果当前线程不是拥有者线程，通过队列派发调用。"""
+    def _cross_thread_call(self, func, *args, timeout=None):
+        """如果当前线程不是拥有者线程，通过队列派发调用。可指定超时（秒）。"""
         current = threading.current_thread().ident
         if self._owner_thread is None or current == self._owner_thread:
-            return func(*args, **kwargs)
+            return func(*args)
         # 派发到拥有者线程
-        timeout = self._cross_thread_timeout
+        if timeout is not None:
+            call_timeout = timeout
+        else:
+            call_timeout = self._cross_thread_timeout
         result_q: queue.Queue = queue.Queue()
-        self._call_queue.put((func, args, kwargs, result_q))
+        self._call_queue.put((func, args, {}, result_q))
         try:
-            tag, value = result_q.get(timeout=timeout)
+            tag, value = result_q.get(timeout=call_timeout)
         except queue.Empty:
-            # 检测 Playwright 是否已 crash（Node.js 进程不在了）
+            # 检查 Playwright 是否已 crash（Node.js 进程不在了）
             pw_alive = False
             try:
                 if self._playwright and self._playwright._connection._transport._proc:
@@ -731,7 +792,7 @@ class BrowserEngine:
                     "请重新启动浏览器连接（点击'启动浏览器'）。"
                 )
             raise RuntimeError(
-                f"浏览器操作超时（{timeout}s），可能是页面加载过慢或连接断开。"
+                f"浏览器操作超时（{call_timeout}s），可能是页面加载过慢或连接断开。"
             )
         if tag == "error":
             raise value
@@ -741,7 +802,63 @@ class BrowserEngine:
     def page(self) -> Page:
         if self._page is None:
             raise RuntimeError("浏览器尚未启动，请先调用 start()")
+        # 检测页面是否已关闭/崩溃，失效则自动切换到可用的活页面。
+        # 注意：本属性可能被非 owner 线程访问（如录制轮询线程），
+        # 健康检查必须经 _cross_thread_call 派发到 owner 线程执行，
+        # 否则 Playwright 同步 API 会因线程违例抛错，误判页面失效，
+        # 进而触发兜底 new_page() 反复新建标签页。
+        def _check(p):
+            try:
+                p.evaluate("1")
+                return True
+            except Exception:
+                return False
+
+        try:
+            alive = self._cross_thread_call(_check, self._page, timeout=5)
+        except Exception:
+            alive = False
+        if not alive:
+            recovered = self._cross_thread_call(self._recover_page, timeout=15)
+            if recovered is None:
+                raise RuntimeError("当前页面已关闭，且无可用标签页，请重新启动浏览器")
         return self._page
+
+    def _recover_page(self) -> Optional[Page]:
+        """主页面失效后，从 context 中找一个活页面接管；找不到则新建空白页。
+
+        该方法在拥有者线程（worker）中执行，可直接操作 Playwright 对象。
+        返回恢复后的页面对象；完全无上下文时返回 None。
+        """
+        if self._context is None:
+            return None
+        # 优先选 _pages 中已知的活页面（保持用户先前的活跃页签）
+        known = [p for p, __ in self._pages]
+        candidates = known + [p for p in self._context.pages if p not in known]
+        for p in candidates:
+            try:
+                p.evaluate("1")
+                self._page = p
+                # 同步索引
+                for i, (pg, __) in enumerate(self._pages):
+                    if pg is p:
+                        self._active_tab_index = i
+                        break
+                else:
+                    self._pages.append((p, p.url))
+                    self._active_tab_index = len(self._pages) - 1
+                return p
+            except Exception:
+                continue
+        # 没有活页面 → 新开一个
+        try:
+            p = self._context.new_page()
+            self._page = p
+            self._pages.append((p, p.url))
+            self._active_tab_index = len(self._pages) - 1
+            return p
+        except Exception:
+            return None
 
     @property
     def is_connected(self) -> bool:
@@ -788,22 +905,74 @@ class BrowserEngine:
             }
         return self._cross_thread_call(_do)
 
-    def switch_tab(self, index: int) -> dict:
-        """切换到指定索引的标签页。"""
+    def switch_tab(self, index: int, url: str = "", popup: bool = False) -> dict:
+        """切换到指定索引的标签页；若提供 url 则优先按 URL 匹配（更稳定）。
+
+        popup=True 表示目标页签是上一步点击弹出的：会等待它出现并加载到目标 URL，
+        URL 始终匹配不上时（如带时间戳参数）兜底切到最新打开的页签。
+        """
+        def _alive(p) -> bool:
+            try:
+                return not p.is_closed()
+            except Exception:
+                return False
+
+        def _find(norm: str):
+            exact, prefix = None, None
+            for i, (p, __) in enumerate(self._pages):
+                if not _alive(p):
+                    continue
+                try:
+                    pu = p.url.rstrip("/")
+                except Exception:
+                    continue
+                if pu == norm:
+                    exact = i
+                elif prefix is None and pu.startswith(norm):
+                    prefix = i
+            return exact if exact is not None else prefix
+
         def _do():
             self._sync_pages_list()
-            if index < 0 or index >= len(self._pages):
-                return {"error": f"无效标签页索引: {index}，当前共 {len(self._pages)} 个标签页"}
-            page, __ = self._pages[index]
+            target = None
+            if url:
+                norm = url.rstrip("/")
+                deadline = time.time() + (10 if popup else 3)
+                target = _find(norm)
+                while target is None and time.time() < deadline:
+                    try:
+                        self._pages[self._active_tab_index][0].wait_for_timeout(300)
+                    except Exception:
+                        time.sleep(0.3)
+                    self._sync_pages_list()
+                    target = _find(norm)
+                if target is None and popup:
+                    # 兜底：切到最新的、非当前的活页签
+                    for i in range(len(self._pages) - 1, -1, -1):
+                        p = self._pages[i][0]
+                        if i != self._active_tab_index and _alive(p):
+                            target = i
+                            break
+                if target is None:
+                    return {"error": f"未找到 URL 匹配的标签页: {url}，当前共 {len(self._pages)} 个标签页"}
+            if target is None:
+                target = index
+            if target < 0 or target >= len(self._pages):
+                return {"error": f"无效标签页索引: {target}，当前共 {len(self._pages)} 个标签页"}
+            page, __ = self._pages[target]
             try:
                 page.title()
             except Exception:
-                return {"error": f"标签页 {index} 已关闭或不可用"}
+                return {"error": f"标签页 {target} 已关闭或不可用"}
             self._page = page
-            self._active_tab_index = index
+            self._active_tab_index = target
             page.bring_to_front()
+            try:
+                page.wait_for_load_state("networkidle", timeout=10000)
+            except Exception:
+                pass
             return {
-                "tab_index": index,
+                "tab_index": target,
                 "url": page.url,
                 "title": page.title(),
                 "total_tabs": len(self._pages),
@@ -864,8 +1033,27 @@ class BrowserEngine:
     # ------------------------------------------------------------------
 
     def goto(self, url: str, wait_until: str = "domcontentloaded") -> dict:
-        """导航到指定 URL。"""
+        """导航到指定 URL。
+
+        若上一步点击已触发跳转到同一 URL，则不再重复加载：重复 goto 会刷新页面
+        并多出一条历史记录，导致后续 back 退回到错误页面（丢失搜索状态）。
+        """
+        def _norm(u: str) -> str:
+            return (u or "").rstrip("/")
+
         def _do():
+            target = _norm(url)
+            if _norm(self.page.url) != target:
+                try:
+                    self.page.wait_for_url(lambda u: _norm(u) == target, timeout=2000)
+                except Exception:
+                    pass
+            if _norm(self.page.url) == target:
+                try:
+                    self.page.wait_for_load_state("networkidle", timeout=10000)
+                except Exception:
+                    pass
+                return {"url": self.page.url, "title": self.page.title(), "skipped": True}
             self.page.goto(url, wait_until=wait_until)
             self.page.wait_for_load_state("networkidle")
             return {"url": self.page.url, "title": self.page.title()}
@@ -1050,6 +1238,10 @@ class BrowserEngine:
         """浏览器后退。"""
         def _do():
             self.page.go_back()
+            try:
+                self.page.wait_for_load_state("networkidle", timeout=10000)
+            except Exception:
+                pass
             time.sleep(0.5)
             return {"url": self.page.url}
         result = self._cross_thread_call(_do)
@@ -1313,7 +1505,7 @@ class BrowserEngine:
             "select_option": lambda p: self.select_option(p["selector"], p["value"]),
             # 多标签页操作
             "new_tab": lambda p: self.new_tab(p.get("url", "")),
-            "switch_tab": lambda p: self.switch_tab(p["index"]),
+            "switch_tab": lambda p: self.switch_tab(p.get("index", 0), p.get("url", ""), bool(p.get("popup", False))),
             "close_tab": lambda p: self.close_tab(p.get("index")),
             "list_tabs": lambda p: self.list_tabs(),
         }

@@ -3055,6 +3055,8 @@ def save_schedule(
     variables: Optional[dict[str, str]] = None,
     ai_config: Optional[dict[str, str]] = None,
     enabled: bool = True,
+    auto_start_browser: bool = True,
+    auto_close_browser: bool = False,
 ) -> dict[str, Any]:
     """创建或更新定时任务。
 
@@ -3079,6 +3081,8 @@ def save_schedule(
         "variables": variables or {},
         "ai_config": ai_config,
         "enabled": enabled,
+        "auto_start_browser": auto_start_browser,
+        "auto_close_browser": auto_close_browser,
         "created_at": time.time(),
         "last_run": None,
         "run_count": 0,
@@ -3132,7 +3136,7 @@ def update_schedule(schedule_id: str, updates: dict[str, Any]) -> dict[str, Any]
     if record is None:
         return {"success": False, "error": "定时任务不存在"}
 
-    for key in ("trigger_type", "trigger_args", "variables", "ai_config", "enabled"):
+    for key in ("trigger_type", "trigger_args", "variables", "ai_config", "enabled", "auto_start_browser", "auto_close_browser"):
         if key in updates:
             record[key] = updates[key]
 
@@ -3188,6 +3192,9 @@ def _register_job(record: dict[str, Any]) -> None:
             "ai_config": record.get("ai_config"),
         },
         replace_existing=True,
+        max_instances=1,           # 上一次还没跑完时不重复触发
+        coalesce=True,             # 错过的多次触发合并为一次
+        misfire_grace_time=300,    # 延迟 5 分钟内仍会补跑
         **trigger_args,
     )
     logger.info("已注册定时任务: %s (%s)", record["id"], record.get("workflow_name", ""))
@@ -3206,16 +3213,73 @@ def _restore_schedules() -> None:
 # 定时回放执行函数 — 被 APScheduler 调用时 browser_engine 需从外部注入
 _scheduled_browser_engine = None
 _scheduled_event_callback = None
+_scheduled_engine_provider: Optional[Callable[..., Any]] = None
+_scheduled_browser_stopper: Optional[Callable[[], None]] = None
 
 
 def set_scheduled_replay_context(
     browser_engine: Any,
     event_callback: Optional[Callable[[str, Any], None]] = None,
+    engine_provider: Optional[Callable[..., Any]] = None,
+    stop_browser_provider: Optional[Callable[[], None]] = None,
 ) -> None:
-    """设置定时回放的全局上下文（由 app.py 在启动时调用）。"""
-    global _scheduled_browser_engine, _scheduled_event_callback
+    """设置定时回放的全局上下文（由 app.py 在启动时调用）。
+
+    engine_provider(auto_start: bool) -> engine：触发时调用，负责返回可用引擎，
+    浏览器未启动且 auto_start=True 时自动拉起；不可用时抛出异常说明原因。
+    stop_browser_provider()：执行完且 auto_close_browser=True 时调用，关闭浏览器。
+    """
+    global _scheduled_browser_engine, _scheduled_event_callback, _scheduled_engine_provider, _scheduled_browser_stopper
     _scheduled_browser_engine = browser_engine
     _scheduled_event_callback = event_callback
+    if engine_provider is not None:
+        _scheduled_engine_provider = engine_provider
+    if stop_browser_provider is not None:
+        _scheduled_browser_stopper = stop_browser_provider
+
+
+def _emit_schedule(event: str, data: dict) -> None:
+    if _scheduled_event_callback:
+        try:
+            _scheduled_event_callback(event, data)
+        except Exception:
+            pass
+
+
+def set_engine_running_reporter(reporter: Optional[Callable[[], bool]]) -> None:
+    """注入"浏览器当前是否已连接"查询回调（app.py 在启动时调用）。
+
+    定时任务用它判断触发前浏览器是否本来就在运行：
+    只有原本没开、由本次任务自动拉起的浏览器，auto_close_browser 才会关闭。
+    """
+    global _engine_running_reporter
+    if reporter is not None:
+        _engine_running_reporter = reporter
+
+
+_engine_running_reporter: Optional[Callable[[], bool]] = None
+
+
+def _provider_reports_running() -> bool:
+    if _engine_running_reporter is None:
+        return False
+    try:
+        return bool(_engine_running_reporter())
+    except Exception:
+        return False
+
+
+def _save_schedule_run(schedule_id: str, success: bool, error: str = "") -> None:
+    record = get_schedule(schedule_id)
+    if not record:
+        return
+    record["last_run"] = time.time()
+    record["run_count"] = record.get("run_count", 0) + 1
+    record["last_result"] = "success" if success else "failed"
+    record["last_error"] = "" if success else (error or "")[:300]
+    with _file_lock:
+        with open(_schedule_path(schedule_id), "w", encoding="utf-8") as f:
+            json.dump(record, f, ensure_ascii=False, indent=2)
 
 
 def _scheduled_replay_job(
@@ -3225,47 +3289,102 @@ def _scheduled_replay_job(
     ai_config: Optional[dict[str, str]] = None,
 ) -> None:
     """定时任务执行函数。"""
+    record = get_schedule(schedule_id) or {}
+    wf_name = record.get("workflow_name", "")
+    auto_start = record.get("auto_start_browser", True)
+    auto_close = record.get("auto_close_browser", False)
+    # 触发前浏览器是否本来就在运行（稍后 engine 获取后再实际判断）
+    browser_was_running = False
     logger.info("定时任务触发: %s (workflow=%s)", schedule_id, workflow_id)
+    _emit_schedule("scheduled_replay_start", {
+        "schedule_id": schedule_id, "workflow_id": workflow_id, "workflow_name": wf_name,
+    })
 
-    if _scheduled_browser_engine is None:
-        logger.error("定时回放失败: 浏览器引擎未就绪")
+    # 获取可用浏览器引擎（未启动时按配置自动拉起）
+    engine = None
+    try:
+        if _scheduled_engine_provider is not None:
+            browser_was_running = _provider_reports_running()
+            engine = _scheduled_engine_provider(auto_start=auto_start)
+        else:
+            browser_was_running = True
+            engine = _scheduled_browser_engine
+            if engine is None or not getattr(engine, "is_connected", False):
+                raise RuntimeError("浏览器引擎未就绪")
+    except Exception as exc:
+        err = str(exc)
+        logger.error("定时回放未执行: %s — %s", schedule_id, err)
+        _save_schedule_run(schedule_id, False, err)
+        _emit_schedule("scheduled_replay_complete", {
+            "schedule_id": schedule_id, "workflow_id": workflow_id, "workflow_name": wf_name,
+            "success": False, "error": err,
+        })
         return
 
     def on_step(step_info: dict) -> None:
-        if _scheduled_event_callback:
-            _scheduled_event_callback("scheduled_replay_step", step_info)
+        _emit_schedule("scheduled_replay_step", step_info)
 
-    result = replay_workflow(
-        workflow_id=workflow_id,
-        browser_engine=_scheduled_browser_engine,
-        variables=variables,
-        on_step=on_step,
-        ai_config=ai_config,
-    )
+    try:
+        result = replay_workflow(
+            workflow_id=workflow_id,
+            browser_engine=engine,
+            variables=variables,
+            on_step=on_step,
+            ai_config=ai_config,
+        )
+    except Exception as exc:
+        result = {"success": False, "error": str(exc)}
 
-    # 更新执行记录
+    success = bool(result.get("success"))
+    _save_schedule_run(schedule_id, success, result.get("error", ""))
+    _emit_schedule("scheduled_replay_complete", {
+        "schedule_id": schedule_id,
+        "workflow_id": workflow_id,
+        "workflow_name": wf_name,
+        "success": success,
+        "summary": result.get("summary", ""),
+        "error": result.get("error", ""),
+    })
+
+    logger.info("定时任务完成: %s — %s", schedule_id, "成功" if success else "失败")
+
+    # 执行完自动关闭浏览器（仅当浏览器是本次任务自动拉起的）
+    if auto_close and _scheduled_browser_stopper is not None and not browser_was_running:
+        logger.info("定时任务: 浏览器为本次自动拉起，正在自动关闭…")
+        try:
+            _scheduled_browser_stopper()
+        except Exception as exc:
+            logger.error("定时任务自动关闭浏览器失败: %s", exc)
+
+
+def run_schedule_now(schedule_id: str) -> dict[str, Any]:
+    """立即在后台执行一次定时任务（与定时触发流程一致）。"""
     record = get_schedule(schedule_id)
-    if record:
-        record["last_run"] = time.time()
-        record["run_count"] = record.get("run_count", 0) + 1
-        record["last_result"] = "success" if result.get("success") else "failed"
-        with _file_lock:
-            with open(_schedule_path(schedule_id), "w", encoding="utf-8") as f:
-                json.dump(record, f, ensure_ascii=False, indent=2)
-
-    if _scheduled_event_callback:
-        _scheduled_event_callback("scheduled_replay_complete", {
-            "schedule_id": schedule_id,
-            "workflow_id": workflow_id,
-            "success": result.get("success", False),
-            "summary": result.get("summary", ""),
-        })
-
-    logger.info(
-        "定时任务完成: %s — %s",
-        schedule_id,
-        "成功" if result.get("success") else "失败",
+    if record is None:
+        return {"success": False, "error": "定时任务不存在"}
+    t = threading.Thread(
+        target=_scheduled_replay_job,
+        kwargs={
+            "schedule_id": record["id"],
+            "workflow_id": record["workflow_id"],
+            "variables": record.get("variables"),
+            "ai_config": record.get("ai_config"),
+        },
+        daemon=True,
     )
+    t.start()
+    return {"success": True, "message": "已开始执行"}
+
+
+def get_schedule_next_run(schedule_id: str) -> Optional[float]:
+    """返回定时任务下次触发的时间戳（未注册/已禁用返回 None）。"""
+    try:
+        job = get_scheduler().get_job(schedule_id)
+        if job and job.next_run_time:
+            return job.next_run_time.timestamp()
+    except Exception:
+        pass
+    return None
 
 
 # ------------------------------------------------------------------
